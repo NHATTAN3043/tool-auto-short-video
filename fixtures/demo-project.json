@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "id": "prj_demo",
+  "name": "Demo Shorts Studio",
+  "mode": "manual",
+  "automationSettings": {
+    "scriptGeneration": false,
+    "scenePlanning": false,
+    "visualKeywords": false,
+    "voiceGeneration": false,
+    "mediaSearch": false,
+    "mediaRanking": false,
+    "autoMediaSelection": false
+  },
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "script": "Chào mừng bạn đến với Shorts Studio, công cụ dựng video dọc thật nhanh.\n\nẢnh tĩnh nằm giữa khung hình, phía sau là nền mờ đẹp mắt.\n\nCảnh cuối dùng đoạn từ giây mười bốn đến giây hai mươi mốt. Hẹn gặp lại!",
+  "scenes": [
+    {
+      "id": "scn_demo_1",
+      "narration": "Chào mừng bạn đến với Shorts Studio, công cụ dựng video dọc thật nhanh.",
+      "durationMs": 6300,
+      "media": {
+        "assetId": "ast_demo_video1",
+        "sourceStartMs": 3200,
+        "sourceEndMs": 9500,
+        "fit": "cover",
+        "focusX": 0.5,
+        "volume": 0,
+        "kenBurns": false
+      },
+      "status": "ready"
+    },
+    {
+      "id": "scn_demo_2",
+      "narration": "Ảnh tĩnh nằm giữa khung hình, phía sau là nền mờ đẹp mắt.",
+      "durationMs": 4000,
+      "media": {
+        "assetId": "ast_demo_photo",
+        "sourceStartMs": 0,
+        "fit": "contain",
+        "focusX": 0.5,
+        "volume": 0,
+        "kenBurns": true
+      },
+      "status": "ready"
+    },
+    {
+      "id": "scn_demo_3",
+      "narration": "Cảnh cuối dùng đoạn từ giây mười bốn đến giây hai mươi mốt. Hẹn gặp lại!",
+      "durationMs": 7000,
+      "media": {
+        "assetId": "ast_demo_video2",
+        "sourceStartMs": 14000,
+        "sourceEndMs": 21000,
+        "fit": "cover",
+        "focusX": 0.3,
+        "volume": 0,
+        "kenBurns": false
+      },
+      "status": "ready"
+    }
+  ],
+  "assets": [
+    {
+      "id": "ast_demo_video1",
+      "kind": "video",
+      "source": "generated",
+      "fileName": "video-1.mp4",
+      "path": "media/ast_demo_video1.mp4",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "ast_demo_photo",
+      "kind": "image",
+      "source": "generated",
+      "fileName": "photo.png",
+      "path": "media/ast_demo_photo.png",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "ast_demo_video2",
+      "kind": "video",
+      "source": "generated",
+      "fileName": "video-2.mp4",
+      "path": "media/ast_demo_video2.mp4",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "ast_demo_voice",
+      "kind": "audio",
+      "source": "generated",
+      "fileName": "voice.mp3",
+      "path": "media/ast_demo_voice.mp3",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "voiceAssetId": "ast_demo_voice",
+  "style": {
+    "captions": {
+      "enabled": true,
+      "positionY": 0.62,
+      "fontSize": 64,
+      "maxWordsPerCaption": 6,
+      "uppercase": false,
+      "color": "#FFFFFF"
+    },
+    "transition": "fade",
+    "transitionMs": 250,
+    "background": "#000000"
+  },
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z"
+}

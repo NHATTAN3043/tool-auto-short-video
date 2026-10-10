@@ -1,0 +1,22 @@
+{
+  "name": "@studio/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "render": "tsx src/cli/render.ts",
+    "demo": "tsx src/cli/demo.ts",
+    "db:migrate": "tsx src/cli/db-migrate.ts",
+    "db:import": "tsx src/cli/db-import.ts",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@studio/adapters": "workspace:*",
+    "@studio/config": "workspace:*",
+    "@studio/domain": "workspace:*",
+    "@studio/services": "workspace:*",
+    "@studio/video": "workspace:*"
+  }
+}
