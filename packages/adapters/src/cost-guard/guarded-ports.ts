@@ -21,6 +21,7 @@ import {
   type PaidCallContext,
   type PaidCallOutcome,
   type RankImage,
+  type SpeechContext,
   type SynthesizedSpeech,
   type TtsEstimate,
   type TtsModel,
@@ -133,7 +134,7 @@ export class GuardedTts implements TtsPort {
     return this.inner.estimate(text, voice);
   }
 
-  synthesize(text: string, voice: VoiceSettings): Promise<SynthesizedSpeech> {
+  synthesize(text: string, voice: VoiceSettings, context?: SpeechContext): Promise<SynthesizedSpeech> {
     // Billed per character, so the estimate is also the real cost; failed requests are not billed.
     const cost = this.inner.estimate(text, voice);
     return this.guard.guard({
@@ -145,7 +146,7 @@ export class GuardedTts implements TtsPort {
         operation: "speech",
         maxUsd: cost.usd,
       },
-      run: () => this.inner.synthesize(text, voice),
+      run: () => this.inner.synthesize(text, voice, context),
       onResult: () => ({ status: "ok", usd: cost.usd, characters: cost.characters }),
       onError: failure,
     });

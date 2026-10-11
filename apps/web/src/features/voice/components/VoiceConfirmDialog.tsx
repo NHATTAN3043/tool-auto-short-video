@@ -1,6 +1,6 @@
 "use client";
 
-import type { Project } from "@studio/domain";
+import { sceneVoiceStatus, type Project } from "@studio/domain";
 
 import { BudgetStatus } from "@/features/settings";
 import {
@@ -20,6 +20,13 @@ import { estimateSummary, sceneNumbers } from "../model";
 /** Paid call: the estimated cost is shown and nothing runs until the user confirms. */
 export function VoiceConfirmDialog({ project, jobs }: { project: Project; jobs: VoiceJobsState }) {
   const pending = jobs.pending;
+  const verb = pending?.regenerate ? "Tạo lại giọng" : "Tạo giọng";
+  const replacesUpload =
+    pending?.regenerate === true &&
+    project.scenes.some(
+      (scene) =>
+        pending.estimate.sceneIds.includes(scene.id) && sceneVoiceStatus(project, scene) === "uploaded",
+    );
   return (
     <AlertDialog
       open={pending !== null}
@@ -30,7 +37,7 @@ export function VoiceConfirmDialog({ project, jobs }: { project: Project; jobs: 
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            Tạo giọng cho cảnh {pending ? sceneNumbers(project, pending.estimate.sceneIds) : ""}?
+            {verb} cho cảnh {pending ? sceneNumbers(project, pending.estimate.sceneIds) : ""}?
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="flex flex-col gap-1">
@@ -38,6 +45,12 @@ export function VoiceConfirmDialog({ project, jobs }: { project: Project; jobs: 
                 Chi phí ước tính: {pending ? estimateSummary(pending.estimate) : ""}. Giọng cũ của các cảnh
                 này vẫn được giữ trong thư viện media.
               </span>
+              {replacesUpload ? (
+                <span>
+                  Cảnh đang dùng file bạn tải lên. File đó vẫn còn trong thư viện, chọn lại được ở ô giọng của
+                  cảnh.
+                </span>
+              ) : null}
               {pending ? <BudgetStatus check={pending.estimate.budget} /> : null}
             </div>
           </AlertDialogDescription>
@@ -50,7 +63,7 @@ export function VoiceConfirmDialog({ project, jobs }: { project: Project; jobs: 
               void jobs.confirm();
             }}
           >
-            Tạo giọng
+            {verb}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

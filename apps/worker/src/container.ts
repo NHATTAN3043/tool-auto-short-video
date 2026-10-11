@@ -6,6 +6,7 @@ import {
   ClaudeAi,
   createPgDatabase,
   ElevenLabsTts,
+  FfmpegAudioNormalizer,
   FfmpegClipCutter,
   FetchRemoteFiles,
   FfmpegMediaProbe,
@@ -32,6 +33,7 @@ import {
   makeExportCapcut,
   makeFailStaleJobs,
   makeGenerateSceneVoices,
+  makeNormalizeSceneVoices,
   makeImportCandidate,
   makeResolveRankImages,
   makeRunFullAi,
@@ -133,6 +135,8 @@ export function createContainer(env: Env = loadRepoEnv(REPO_ROOT), clock: Clock 
     env.ELEVENLABS_API_KEY === undefined
       ? null
       : new ElevenLabsTts({ apiKey: env.ELEVENLABS_API_KEY, usdPerCredit: env.ELEVENLABS_USD_PER_CREDIT });
+  // Every scene voice is stored at one loudness; also used by "Cân bằng âm lượng" for older voices.
+  const normalizer = new FfmpegAudioNormalizer({ ffmpegPath: env.STUDIO_FFMPEG_PATH });
   const generateSceneVoices = tts
     ? makeGenerateSceneVoices({
         repo,
@@ -140,8 +144,11 @@ export function createContainer(env: Env = loadRepoEnv(REPO_ROOT), clock: Clock 
         probe,
         tts: (context) => new GuardedTts(tts, costGuard, context),
         clock,
+        normalizer,
       })
     : null;
+  // Free: balances voices already made, so it works without a TTS key.
+  const normalizeSceneVoices = makeNormalizeSceneVoices({ repo, storage, probe, normalizer, clock });
 
   // No key → ai jobs fail with a clear message.
   const ai =
@@ -209,6 +216,7 @@ export function createContainer(env: Env = loadRepoEnv(REPO_ROOT), clock: Clock 
       renderProject,
       exportCapcut,
       generateSceneVoices,
+      normalizeSceneVoices,
       runAiTask,
       runFullAi,
       clock,

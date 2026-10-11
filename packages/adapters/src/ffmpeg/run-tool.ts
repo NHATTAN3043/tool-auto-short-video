@@ -17,3 +17,21 @@ export function runTool(command: string, args: string[], timeoutMs: number): Pro
     );
   });
 }
+
+/** Like `runTool`, but resolves with stderr: ffmpeg filters such as `loudnorm` print their report there. */
+export function runToolForStderr(command: string, args: string[], timeoutMs: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      command,
+      args,
+      { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024, windowsHide: true },
+      (error, _stdout, stderr) => {
+        if (error) {
+          reject(new Error(`${command} failed: ${stderr.trim() || error.message}`));
+        } else {
+          resolve(stderr);
+        }
+      },
+    );
+  });
+}

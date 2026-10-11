@@ -11,8 +11,14 @@ export async function POST(request: Request, { params }: RouteContext) {
   try {
     const { id } = await params;
     const estimateSceneVoices = requireTts(getContainer().estimateSceneVoices);
-    const { sceneIds } = await parseOptionalJsonBody(request, SceneVoicesBodySchema, {});
-    return jsonOk(await estimateSceneVoices({ projectId: id, ...(sceneIds && { sceneIds }) }));
+    const { sceneIds, regenerate } = await parseOptionalJsonBody(request, SceneVoicesBodySchema, {});
+    return jsonOk(
+      await estimateSceneVoices({
+        projectId: id,
+        ...(sceneIds && { sceneIds }),
+        ...(regenerate && { regenerate }),
+      }),
+    );
   } catch (error) {
     return toErrorResponse(error);
   }

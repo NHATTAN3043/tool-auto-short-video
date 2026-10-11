@@ -15,13 +15,14 @@ import {
   FakeClock,
   FakeCostGuard,
   FakeMediaProbe,
+  FakeAudioNormalizer,
   FakeTts,
   InMemoryJobQueue,
   InMemoryProjectRepository,
   InMemoryStorage,
 } from "../testing";
 import { makeEstimateSceneVoices } from "./estimate-scene-voices";
-import { makeGenerateSceneVoices } from "./generate-scene-voices";
+import { makeGenerateSceneVoices, speechContext } from "./generate-scene-voices";
 import { makeListTtsVoices } from "./list-tts-voices";
 import { makeRequestSceneVoices } from "./request-scene-voices";
 
@@ -131,6 +132,93 @@ describe("generateSceneVoices", () => {
     expect(after.assets).toHaveLength(before.assets.length + 1);
   });
 
+  it("makes a new take of a matching voice only when asked to regenerate", async () => {
+    const s = await setup();
+    const ids = await s.sceneIds();
+    const second = ids[1] ?? "";
+    await s.generate({ projectId: "prj_1", sceneIds: ids });
+    const before = await s.repo.get("prj_1");
+    s.tts.calls.length = 0;
+
+    expect((await s.generate({ projectId: "prj_1", sceneIds: [second] })).skipped).toEqual([second]);
+    expect(s.tts.calls).toEqual([]);
+
+    const result = await s.generate({ projectId: "prj_1", sceneIds: [second], regenerate: true });
+    expect(result.generated).toEqual([second]);
+    const after = await s.repo.get("prj_1");
+    const oldTake = before.scenes[1]?.voiceAssetId;
+    expect(after.scenes[1]?.voiceAssetId).not.toBe(oldTake);
+    // The old take stays in the project, so the user can pick it again.
+    expect(after.assets.some((asset) => asset.id === oldTake)).toBe(true);
+    const scene = after.scenes[1];
+    if (!scene) throw new Error("scene 2 is missing");
+    expect(sceneVoiceStatus(after, scene)).toBe("current");
+  });
+
+  it("still skips scenes without narration when regenerating", async () => {
+    const s = await setup();
+    const ids = await s.sceneIds();
+    const project = await s.repo.get("prj_1");
+    await s.repo.save(updateScene(project, ids[0] ?? "", { narration: "  " }));
+    const result = await s.generate({ projectId: "prj_1", sceneIds: [ids[0] ?? ""], regenerate: true });
+    expect(result).toEqual({ generated: [], skipped: [ids[0]], failed: [] });
+  });
+
+  it("reads each scene with the narration around it as context", async () => {
+    const s = await setup();
+    const ids = await s.sceneIds();
+    await s.generate({ projectId: "prj_1", sceneIds: ids });
+    expect(s.tts.calls.map((call) => call.context)).toEqual([
+      { nextText: "Cảnh hai." },
+      { previousText: "Cảnh một.", nextText: "Cảnh ba." },
+      { previousText: "Cảnh hai.", nextText: "Cảnh bốn." },
+      { previousText: "Cảnh ba.", nextText: "Cảnh năm." },
+      { previousText: "Cảnh bốn." },
+    ]);
+    expect(speechContext([], 0)).toEqual({});
+  });
+
+  it("stores loudness-normalized voices and removes the raw file", async () => {
+    const s = await setup();
+    const normalizer = new FakeAudioNormalizer(s.storage);
+    const generate = makeGenerateSceneVoices({
+      repo: s.repo,
+      storage: s.storage,
+      probe: s.probe,
+      tts: () => s.tts,
+      clock: new FakeClock("2026-10-01T00:00:00.000Z"),
+      normalizer,
+      newId: () => "ast_n",
+    });
+    const first = (await s.sceneIds())[0] ?? "";
+    expect((await generate({ projectId: "prj_1", sceneIds: [first] })).generated).toEqual([first]);
+    expect(filesOf(s).get("projects/prj_1/media/ast_n.mp3")).toBe("norm:voice:Cảnh một.");
+    expect(s.storage.files.has("projects/prj_1/media/ast_n.raw.mp3")).toBe(false);
+    const project = await s.repo.get("prj_1");
+    expect(project.assets.find((asset) => asset.id === "ast_n")).toMatchObject({ loudnessNormalized: true });
+  });
+
+  it("keeps the paid audio as it came when normalizing fails", async () => {
+    const s = await setup();
+    const normalizer = new FakeAudioNormalizer(s.storage);
+    normalizer.failWith = new Error("ffmpeg missing");
+    const generate = makeGenerateSceneVoices({
+      repo: s.repo,
+      storage: s.storage,
+      probe: s.probe,
+      tts: () => s.tts,
+      clock: new FakeClock("2026-10-01T00:00:00.000Z"),
+      normalizer,
+      newId: () => "ast_n",
+    });
+    const first = (await s.sceneIds())[0] ?? "";
+    expect((await generate({ projectId: "prj_1", sceneIds: [first] })).generated).toEqual([first]);
+    expect(filesOf(s).get("projects/prj_1/media/ast_n.mp3")).toBe("voice:Cảnh một.");
+    expect(s.storage.files.has("projects/prj_1/media/ast_n.raw.mp3")).toBe(false);
+    const asset = (await s.repo.get("prj_1")).assets.find((candidate) => candidate.id === "ast_n");
+    expect(asset?.loudnessNormalized).toBeUndefined();
+  });
+
   it("regenerates every voice when the voice settings change", async () => {
     const s = await setup();
     const ids = await s.sceneIds();
@@ -229,6 +317,18 @@ describe("estimateSceneVoices", () => {
   });
 });
 
+describe("estimateSceneVoices with regenerate", () => {
+  it("counts every requested scene with narration, matching voices included", async () => {
+    const s = await setup();
+    const ids = await s.sceneIds();
+    await s.generate({ projectId: "prj_1", sceneIds: ids });
+    expect((await s.estimate({ projectId: "prj_1", sceneIds: [ids[2] ?? ""] })).sceneIds).toEqual([]);
+    const estimate = await s.estimate({ projectId: "prj_1", sceneIds: [ids[2] ?? ""], regenerate: true });
+    expect(estimate.sceneIds).toEqual([ids[2]]);
+    expect(estimate.characters).toBe("Cảnh ba.".length);
+  });
+});
+
 describe("requestSceneVoices", () => {
   it("queues a tts job with the scenes that need a voice", async () => {
     const s = await setup();
@@ -245,6 +345,18 @@ describe("requestSceneVoices", () => {
     expect((await s.request({ projectId: "prj_1", sceneIds: [ids[2] ?? ""] })).id).toBe(all.id);
     await s.queue.update(all.id, { status: "FAILED" });
     expect((await s.request({ projectId: "prj_1", sceneIds: [ids[2] ?? ""] })).id).toBe("job_2");
+  });
+
+  it("queues a regenerate job that a plain job never stands in for", async () => {
+    const s = await setup();
+    const ids = await s.sceneIds();
+    const plain = await s.request({ projectId: "prj_1" });
+    expect(plain.voice).toBeUndefined();
+    const again = await s.request({ projectId: "prj_1", sceneIds: [ids[0] ?? ""], regenerate: true });
+    expect(again.id).not.toBe(plain.id);
+    expect(again).toMatchObject({ kind: "tts", sceneIds: [ids[0]], voice: { regenerate: true } });
+    const same = await s.request({ projectId: "prj_1", sceneIds: [ids[0] ?? ""], regenerate: true });
+    expect(same.id).toBe(again.id);
   });
 
   it("refuses a batch that would break a budget, with the reason", async () => {
@@ -294,6 +406,23 @@ describe("runNextRenderJob with tts jobs", () => {
     expect(done).toMatchObject({ id: job.id, status: "COMPLETED", progress: 1 });
     expect(done?.outputPath).toBeUndefined();
     expect(s.tts.calls).toHaveLength(5);
+  });
+
+  it("passes regenerate from the job to the voice generation", async () => {
+    const s = await setup();
+    const ids = await s.sceneIds();
+    await s.generate({ projectId: "prj_1", sceneIds: ids });
+    s.tts.calls.length = 0;
+    await s.request({ projectId: "prj_1", sceneIds: [ids[4] ?? ""], regenerate: true });
+    const run = makeRunNextRenderJob({
+      queue: s.queue,
+      renderProject: unused,
+      exportCapcut: unused,
+      generateSceneVoices: s.generate,
+      clock: new FakeClock("2026-10-01T00:00:00.000Z"),
+    });
+    expect(await run()).toMatchObject({ status: "COMPLETED" });
+    expect(s.tts.calls.map((call) => call.text)).toEqual(["Cảnh năm."]);
   });
 
   it("fails with a summary when a scene fails, keeping the others", async () => {

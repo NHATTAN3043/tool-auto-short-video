@@ -79,6 +79,7 @@ export {
   activeVoiceTrack,
   hasVoiceConflict,
   sceneVoiceStatus,
+  scenesNeedingLoudness,
   scenesNeedingVoice,
   type SceneVoiceStatus,
 } from "./voice/voice-status";

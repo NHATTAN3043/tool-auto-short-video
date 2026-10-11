@@ -14,8 +14,15 @@ export async function POST(request: Request, { params }: RouteContext) {
   try {
     const { id } = await params;
     const requestSceneVoices = requireTts(getContainer().requestSceneVoices);
-    const { sceneIds } = await parseOptionalJsonBody(request, SceneVoicesBodySchema, {});
-    return jsonOk(await requestSceneVoices({ projectId: id, ...(sceneIds && { sceneIds }) }), 202);
+    const { sceneIds, regenerate } = await parseOptionalJsonBody(request, SceneVoicesBodySchema, {});
+    return jsonOk(
+      await requestSceneVoices({
+        projectId: id,
+        ...(sceneIds && { sceneIds }),
+        ...(regenerate && { regenerate }),
+      }),
+      202,
+    );
   } catch (error) {
     return toErrorResponse(error);
   }

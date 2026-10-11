@@ -16,11 +16,13 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
   const latest = await container.getLatestFullAi(id);
 
   return (
-    <FullAiReview
-      project={project}
-      latest={latest}
-      ttsAvailable={container.listTtsVoices !== null}
-      aiAvailable={container.requestAiTask !== null}
-    />
+    <div className="mx-auto max-w-6xl px-4 py-8">
+      <FullAiReview
+        project={project}
+        latest={latest}
+        ttsAvailable={container.listTtsVoices !== null}
+        aiAvailable={container.requestAiTask !== null}
+      />
+    </div>
   );
 }

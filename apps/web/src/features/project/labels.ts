@@ -20,6 +20,13 @@ export const MODE_LABELS: Record<AutomationMode, Label> = {
   },
 };
 
+/** What a mode needs from the server; shown under each mode card when creating a project. */
+export const MODE_REQUIREMENTS: Record<AutomationMode, string> = {
+  manual: "Không cần API key",
+  assisted: "Cần khoá AI trên máy chủ",
+  full_ai: "Cần khoá AI trên máy chủ",
+};
+
 export const SETTING_LABELS: Record<keyof AutomationSettings, Label> = {
   scriptGeneration: { title: "Viết script bằng AI", description: "Từ ý tưởng, AI viết lời cho cả video." },
   scenePlanning: { title: "AI chia cảnh", description: "Tách script thành các cảnh hợp lý." },

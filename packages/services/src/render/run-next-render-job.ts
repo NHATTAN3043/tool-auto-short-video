@@ -5,6 +5,7 @@ import type { RunFullAiInput, RunFullAiResult } from "../full-ai/run-full-ai";
 import type { Clock } from "../ports/clock";
 import type { JobQueuePort, RenderJobPatch } from "../ports/job-queue";
 import type { GenerateSceneVoicesInput, GenerateSceneVoicesResult } from "../voice/generate-scene-voices";
+import type { NormalizeSceneVoicesInput } from "../voice/normalize-scene-voices";
 import type { ExportCapcutInput, ExportCapcutResult } from "./export-capcut";
 import type { RenderProjectInput, RenderProjectResult } from "./render-project";
 
@@ -14,6 +15,8 @@ export interface RunNextRenderJobDeps {
   exportCapcut: (input: ExportCapcutInput) => Promise<ExportCapcutResult>;
   /** Null when no TTS provider is configured; `tts` jobs then fail with a clear message. */
   generateSceneVoices?: ((input: GenerateSceneVoicesInput) => Promise<GenerateSceneVoicesResult>) | null;
+  /** Free loudness balancing of existing AI voices (`tts` jobs with `voice.normalizeOnly`); no TTS key needed. */
+  normalizeSceneVoices?: ((input: NormalizeSceneVoicesInput) => Promise<GenerateSceneVoicesResult>) | null;
   /** Null when no AI provider is configured; `ai` jobs then fail with a clear message. */
   runAiTask?: ((job: RenderJob) => Promise<RunAiTaskResult>) | null;
   /** Null when no AI provider is configured; `full_ai` jobs then fail with a clear message. */
@@ -138,6 +141,21 @@ export function makeRunNextRenderJob(deps: RunNextRenderJobDeps) {
   }
 
   async function runVoices(job: RenderJob, onProgress: (progress: number) => void): Promise<void> {
+    if (job.voice?.normalizeOnly === true) {
+      if (!deps.normalizeSceneVoices) throw new Error("Worker chưa cấu hình cân bằng âm lượng (ffmpeg)");
+      const balanced = await deps.normalizeSceneVoices({
+        projectId: job.projectId,
+        sceneIds: job.sceneIds ?? [],
+        onProgress,
+      });
+      if (balanced.failed.length > 0) {
+        const first = balanced.failed[0]?.message ?? "";
+        throw new Error(
+          `Không cân bằng được âm lượng cho ${String(balanced.failed.length)}/${String(job.sceneIds?.length ?? 0)} cảnh: ${first}`,
+        );
+      }
+      return;
+    }
     if (!deps.generateSceneVoices) {
       throw new Error("Chưa cấu hình dịch vụ tạo giọng (ELEVENLABS_API_KEY) cho worker");
     }
@@ -145,6 +163,7 @@ export function makeRunNextRenderJob(deps: RunNextRenderJobDeps) {
       projectId: job.projectId,
       jobId: job.id,
       sceneIds: job.sceneIds ?? [],
+      ...(job.voice?.regenerate === true && { regenerate: true }),
       onProgress,
     });
     // Voices made before the failure are already saved; the job still reports what went wrong.

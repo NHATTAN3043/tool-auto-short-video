@@ -15,6 +15,14 @@ export type RenderJobStatus = z.infer<typeof RenderJobStatusSchema>;
 export const RenderJobKindSchema = z.enum(["video", "capcut", "tts", "ai", "full_ai"]);
 export type RenderJobKind = z.infer<typeof RenderJobKindSchema>;
 
+export const TtsJobOptionsSchema = z.object({
+  /** Make a new take even when the voice still matches its narration (or the scene uses an uploaded file). */
+  regenerate: z.boolean().optional(),
+  /** No paid call: copy the existing AI voices with their loudness evened out. */
+  normalizeOnly: z.boolean().optional(),
+});
+export type TtsJobOptions = z.infer<typeof TtsJobOptionsSchema>;
+
 export const RenderJobSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
@@ -22,6 +30,8 @@ export const RenderJobSchema = z.object({
   kind: RenderJobKindSchema.optional(),
   /** Scenes a `tts` job generates voices for. */
   sceneIds: z.array(z.string().min(1)).min(1).optional(),
+  /** How a `tts` job treats its scenes; missing = generate only missing or outdated voices. */
+  voice: TtsJobOptionsSchema.optional(),
   /** Task, cost reservation and real cost of an `ai` job. */
   ai: AiJobInfoSchema.optional(),
   /** Request, steps and cost of a `full_ai` job. */

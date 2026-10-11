@@ -40,6 +40,7 @@ import {
 
 import type { AiCall, AiCallError, AiEstimate, AiPort, RankImage } from "../ports/ai";
 import type { ArchiveEntry, ArchivePort } from "../ports/archive";
+import type { AudioNormalizerPort } from "../ports/audio-normalizer";
 import type { ClipCutterPort, ClipRange } from "../ports/clip-cutter";
 import type { Clock } from "../ports/clock";
 import type { ApiUsageLog, BudgetSettingsStore, CostGuardPort, GuardedRun } from "../ports/cost-guard";
@@ -52,7 +53,14 @@ import type { ProjectRepository, ProjectSummary } from "../ports/project-reposit
 import type { RendererPort, RenderRequest } from "../ports/renderer";
 import type { SfxLibraryRepository } from "../ports/sfx-library";
 import type { StoragePort } from "../ports/storage";
-import type { SynthesizedSpeech, TtsEstimate, TtsModel, TtsPort, TtsVoice } from "../ports/tts";
+import type {
+  SpeechContext,
+  SynthesizedSpeech,
+  TtsEstimate,
+  TtsModel,
+  TtsPort,
+  TtsVoice,
+} from "../ports/tts";
 import { KeyedLock } from "../shared/keyed-lock";
 
 // In-memory implementations of every port, for use-case tests. They follow the same contracts as the
@@ -346,6 +354,26 @@ export class FakeClipCutter implements ClipCutterPort {
   }
 }
 
+/** Copies the input to the output with a `norm:` prefix, so tests can tell a normalized file apart. */
+export class FakeAudioNormalizer implements AudioNormalizerPort {
+  readonly runs: { input: string; output: string }[] = [];
+  failWith: Error | null = null;
+
+  constructor(private readonly storage: InMemoryStorage) {}
+
+  async normalize(input: string, output: string): Promise<void> {
+    if (this.failWith) throw this.failWith;
+    this.runs.push({ input, output });
+    const source = this.storage.files.get(this.storage.keyOf(input));
+    if (!source) throw new Error(`ENOENT: ${input}`);
+    const prefix = new TextEncoder().encode("norm:");
+    const bytes = new Uint8Array(prefix.length + source.length);
+    bytes.set(prefix);
+    bytes.set(source, prefix.length);
+    await this.storage.write(this.storage.keyOf(output), oneChunk(bytes));
+  }
+}
+
 /** Records the entries of each archive and writes a placeholder file where the ZIP would be. */
 export class FakeArchive implements ArchivePort {
   readonly archives: { entries: ArchiveEntry[]; output: string }[] = [];
@@ -362,7 +390,7 @@ export class FakeArchive implements ArchivePort {
 export class FakeTts implements TtsPort {
   readonly id = "fake";
   readonly models: readonly TtsModel[] = [{ id: "m1", name: "Model 1", creditsPerCharacter: 0.5 }];
-  readonly calls: { text: string; voice: VoiceSettings }[] = [];
+  readonly calls: { text: string; voice: VoiceSettings; context?: SpeechContext }[] = [];
   voices: TtsVoice[] = [{ id: "v1", name: "Giọng 1", labels: { gender: "female" } }];
   failFor = new Set<string>();
   failList = false;
@@ -376,8 +404,8 @@ export class FakeTts implements TtsPort {
     return { characters: text.length, credits, usd: credits * 0.0006 };
   }
 
-  synthesize(text: string, voice: VoiceSettings): Promise<SynthesizedSpeech> {
-    this.calls.push({ text, voice });
+  synthesize(text: string, voice: VoiceSettings, context?: SpeechContext): Promise<SynthesizedSpeech> {
+    this.calls.push({ text, voice, ...(context && { context }) });
     if (this.failFor.has(text)) return Promise.reject(new Error(`provider failed for ${text}`));
     return Promise.resolve({ audio: new TextEncoder().encode(`voice:${text}`), extension: "mp3" });
   }

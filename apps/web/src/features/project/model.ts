@@ -26,6 +26,17 @@ export const SETTING_KEYS: readonly (keyof AutomationSettings)[] = [
   "autoMediaSelection",
 ];
 
+/** Toggles grouped by what they act on, for display. Covers every key of SETTING_KEYS exactly once. */
+export const SETTING_GROUPS: readonly { title: string; keys: readonly (keyof AutomationSettings)[] }[] = [
+  { title: "Script", keys: ["scriptGeneration", "scenePlanning"] },
+  { title: "Hình ảnh", keys: ["visualKeywords", "mediaSearch", "mediaRanking", "autoMediaSelection"] },
+  { title: "Giọng đọc", keys: ["voiceGeneration"] },
+];
+
+export function enabledCount(settings: AutomationSettings): number {
+  return SETTING_KEYS.filter((key) => settings[key]).length;
+}
+
 export function newDraft(mode: AutomationMode = "manual"): ProjectSettingsDraft {
   return { name: "", mode, automationSettings: { ...MODE_PRESETS[mode] } };
 }

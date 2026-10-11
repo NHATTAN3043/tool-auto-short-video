@@ -171,6 +171,9 @@ export function useProjectEditor(initial: Project) {
     setVoice: (assetId: string | null) => {
       dispatch({ type: "setVoice", assetId });
     },
+    setSceneVoice: (sceneId: string, voiceAssetId: string | null) => {
+      dispatch({ type: "setSceneVoice", sceneId, voiceAssetId });
+    },
     setMusic: (music: Music | null) => {
       dispatch({ type: "setMusic", music });
     },

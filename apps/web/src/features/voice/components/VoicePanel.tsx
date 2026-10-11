@@ -1,7 +1,7 @@
 "use client";
 
-import type { Project, VoiceSettings } from "@studio/domain";
-import { MicIcon, RefreshCwIcon } from "lucide-react";
+import { scenesNeedingLoudness, type Project, type VoiceSettings } from "@studio/domain";
+import { AudioLinesIcon, MicIcon, RefreshCwIcon } from "lucide-react";
 import { useId } from "react";
 
 import { Button } from "@/shared/ui/button";
@@ -65,6 +65,7 @@ export function VoicePanel({
   const modelSelectId = useId();
   const settings = project.voice;
   const overview = voiceOverview(project);
+  const unbalanced = scenesNeedingLoudness(project);
   const loaded = catalog.catalog;
   const initial = loaded ? initialVoiceSettings(loaded) : null;
   const knownVoice = loaded?.voices.some((voice) => voice.id === settings?.voiceId) ?? false;
@@ -208,11 +209,34 @@ export function VoicePanel({
           </div>
         ) : null}
 
+        {unbalanced.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-3 border-t pt-4">
+            <Button
+              variant="outline"
+              disabled={jobs.running || jobs.busy}
+              onClick={() => {
+                void jobs.balanceLoudness();
+              }}
+            >
+              <AudioLinesIcon />
+              Cân bằng âm lượng ({unbalanced.length})
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Miễn phí. Đưa giọng AI của cảnh {sceneNumbers(project, unbalanced)} về cùng một độ to; giọng cũ
+              vẫn giữ để chọn lại.
+            </span>
+          </div>
+        ) : null}
+
         {jobs.job && jobs.running ? (
           <p className="text-sm" role="status">
-            {jobs.job.status === "QUEUED"
-              ? "Đang chờ worker tạo giọng…"
-              : `Đang tạo giọng cảnh ${sceneNumbers(project, jobs.job.sceneIds ?? [])}… ${String(Math.round(jobs.job.progress * 100))}%`}
+            {jobs.job.voice?.normalizeOnly === true
+              ? jobs.job.status === "QUEUED"
+                ? "Đang chờ worker cân bằng âm lượng…"
+                : `Đang cân bằng âm lượng cảnh ${sceneNumbers(project, jobs.job.sceneIds ?? [])}… ${String(Math.round(jobs.job.progress * 100))}%`
+              : jobs.job.status === "QUEUED"
+                ? "Đang chờ worker tạo giọng…"
+                : `Đang tạo giọng cảnh ${sceneNumbers(project, jobs.job.sceneIds ?? [])}… ${String(Math.round(jobs.job.progress * 100))}%`}
           </p>
         ) : null}
         {jobs.error ? (

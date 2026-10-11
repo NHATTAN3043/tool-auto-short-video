@@ -20,6 +20,8 @@ export const MediaAssetSchema = z.object({
   hasAudio: z.boolean().optional(),
   attribution: z.string().optional(),
   contentHash: z.string().optional(),
+  /** A speech file whose loudness was evened out (ffmpeg loudnorm) so every scene plays at one level. */
+  loudnessNormalized: z.boolean().optional(),
   createdAt: z.iso.datetime(),
 });
 export type MediaAsset = z.infer<typeof MediaAssetSchema>;

@@ -3,7 +3,15 @@
 import type { Project, RenderJob } from "@studio/domain";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { estimateVoices, fetchProject, getJob, listJobs, requestVoices, type VoiceEstimate } from "../api";
+import {
+  estimateVoices,
+  fetchProject,
+  getJob,
+  listJobs,
+  requestVoiceLoudness,
+  requestVoices,
+  type VoiceEstimate,
+} from "../api";
 import { isRunning, isVoiceJob, VOICE_POLL_INTERVAL_MS } from "../model";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : "Đã có lỗi xảy ra.");
@@ -11,6 +19,8 @@ const message = (error: unknown) => (error instanceof Error ? error.message : "�
 export interface PendingVoiceRun {
   /** Undefined: every scene that needs a voice. */
   sceneIds?: readonly string[];
+  /** New take of voices that still match their narration. */
+  regenerate: boolean;
   estimate: VoiceEstimate;
 }
 
@@ -72,7 +82,11 @@ export function useVoiceJobs(
           if (stopped()) return;
           onFinishedRef.current(server, next.sceneIds ?? []);
           setJob(next);
-          if (next.status === "FAILED") setError(next.errorMessage ?? "Tạo giọng thất bại.");
+          if (next.status === "FAILED") {
+            const fallback =
+              next.voice?.normalizeOnly === true ? "Cân bằng âm lượng thất bại." : "Tạo giọng thất bại.";
+            setError(next.errorMessage ?? fallback);
+          }
         } catch (cause) {
           if (!stopped()) setError(message(cause));
         }
@@ -86,18 +100,19 @@ export function useVoiceJobs(
 
   /** Saves pending edits, then asks the server what the run would cost and opens the confirmation. */
   const prepare = useCallback(
-    async (sceneIds?: readonly string[]) => {
+    async (sceneIds?: readonly string[], options: { regenerate?: boolean } = {}) => {
+      const regenerate = options.regenerate === true;
       setBusy(true);
       setError(null);
       try {
         // The estimate and the job read the stored project, so the latest edits must be saved first.
         await flushSave();
-        const estimate = await estimateVoices(projectId, sceneIds);
+        const estimate = await estimateVoices(projectId, sceneIds, regenerate);
         if (estimate.sceneIds.length === 0) {
           setError("Không có cảnh nào cần tạo giọng.");
           return;
         }
-        setPending({ ...(sceneIds && { sceneIds }), estimate });
+        setPending({ ...(sceneIds && { sceneIds }), regenerate, estimate });
       } catch (cause) {
         setError(message(cause));
       } finally {
@@ -113,7 +128,7 @@ export function useVoiceJobs(
     setError(null);
     try {
       await flushSave();
-      setJob(await requestVoices(projectId, pending.estimate.sceneIds));
+      setJob(await requestVoices(projectId, pending.estimate.sceneIds, pending.regenerate));
       setPending(null);
     } catch (cause) {
       setError(message(cause));
@@ -126,7 +141,21 @@ export function useVoiceJobs(
     setPending(null);
   }, []);
 
-  return { job, running, pending, busy, error, prepare, confirm, cancel };
+  /** Free, so no confirmation: saves pending edits, then queues the loudness job and polls it like the others. */
+  const balanceLoudness = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await flushSave();
+      setJob(await requestVoiceLoudness(projectId));
+    } catch (cause) {
+      setError(message(cause));
+    } finally {
+      setBusy(false);
+    }
+  }, [projectId, flushSave]);
+
+  return { job, running, pending, busy, error, prepare, confirm, cancel, balanceLoudness };
 }
 
 export type VoiceJobsState = ReturnType<typeof useVoiceJobs>;

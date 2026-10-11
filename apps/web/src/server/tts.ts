@@ -9,5 +9,11 @@ export function requireTts<T>(service: T | null): T {
   return service;
 }
 
-/** Body of the project voice routes: the scenes to consider (default: every scene). */
-export const SceneVoicesBodySchema = z.object({ sceneIds: z.array(z.string().min(1)).min(1).optional() });
+/**
+ * Body of the project voice routes: the scenes to consider (default: every scene) and whether to make a new
+ * take of voices that still match (default: only missing or outdated ones).
+ */
+export const SceneVoicesBodySchema = z.object({
+  sceneIds: z.array(z.string().min(1)).min(1).optional(),
+  regenerate: z.boolean().optional(),
+});

@@ -51,6 +51,25 @@ describe("ElevenLabsTts", () => {
     });
   });
 
+  it("sends the neighbouring narration as context, except to eleven_v3", async () => {
+    const context = { previousText: "Câu trước.", nextText: "Câu sau." };
+    const s = setup([audio, audio, audio]);
+    await s.tts.synthesize("Xin chào", voice, context);
+    expect(JSON.parse(s.fetchFn.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+      previous_text: "Câu trước.",
+      next_text: "Câu sau.",
+    });
+
+    await s.tts.synthesize("Xin chào", voice, { nextText: "Câu sau." });
+    const firstScene = JSON.parse(s.fetchFn.mock.calls[1]?.[1]?.body as string) as Record<string, unknown>;
+    expect("previous_text" in firstScene).toBe(false);
+    expect(firstScene.next_text).toBe("Câu sau.");
+
+    await s.tts.synthesize("Xin chào", { ...voice, modelId: "eleven_v3" }, context);
+    const v3 = JSON.parse(s.fetchFn.mock.calls[2]?.[1]?.body as string) as Record<string, unknown>;
+    expect("previous_text" in v3 || "next_text" in v3).toBe(false);
+  });
+
   it("retries 429 and 5xx at most twice", async () => {
     const ok = setup([status(429), status(503), audio]);
     await expect(ok.tts.synthesize("x", voice)).resolves.toBeDefined();

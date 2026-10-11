@@ -8,7 +8,7 @@ import type { VoiceTrack } from "./schema";
  * - `missing`: no scene voice yet.
  * - `current`: a generated voice matching the narration and the project voice settings.
  * - `outdated`: a generated voice made from older narration or settings.
- * - `uploaded`: a voice the user supplied; never replaced by generation.
+ * - `uploaded`: a voice the user supplied; only replaced when the user asks for a new AI take.
  */
 export type SceneVoiceStatus = "empty" | "missing" | "current" | "outdated" | "uploaded";
 
@@ -30,6 +30,21 @@ export function scenesNeedingVoice(project: Project, sceneIds?: readonly string[
     .filter((scene) => {
       const status = sceneVoiceStatus(project, scene);
       return status === "missing" || status === "outdated";
+    })
+    .map((scene) => scene.id);
+}
+
+/**
+ * Scenes whose generated voice has not been loudness-normalized yet, in scene order. Uploaded voices are
+ * never included: the user's own files are not changed.
+ */
+export function scenesNeedingLoudness(project: Project, sceneIds?: readonly string[]): string[] {
+  const wanted = sceneIds === undefined ? null : new Set(sceneIds);
+  return project.scenes
+    .filter((scene) => wanted === null || wanted.has(scene.id))
+    .filter((scene) => {
+      const asset = project.assets.find((candidate) => candidate.id === scene.voiceAssetId);
+      return asset?.kind === "audio" && asset.source === "tts" && asset.loudnessNormalized !== true;
     })
     .map((scene) => scene.id);
 }

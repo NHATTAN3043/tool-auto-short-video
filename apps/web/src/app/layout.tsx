@@ -14,7 +14,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="vi">
       <body className="min-h-screen bg-muted/30">
         <header className="border-b bg-background">
-          <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
+          <div className="flex h-14 items-center justify-between px-4 lg:px-6">
             <Link href="/" className="font-semibold">
               Shorts Studio
             </Link>
@@ -23,7 +23,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </Link>
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+        {/* Pages own their width: list and form pages centre a column, the project workspace uses the full width. */}
+        <main>{children}</main>
       </body>
     </html>
   );

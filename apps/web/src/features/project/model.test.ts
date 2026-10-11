@@ -3,11 +3,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   draftFromProject,
+  enabledCount,
   isCustomized,
   isDirty,
   nameError,
   newDraft,
   selectMode,
+  SETTING_GROUPS,
   SETTING_KEYS,
   toCreateInput,
   toggleSetting,
@@ -17,6 +19,20 @@ describe("project form model", () => {
   it("starts from the manual preset and lists every toggle once", () => {
     expect(newDraft()).toEqual({ name: "", mode: "manual", automationSettings: MODE_PRESETS.manual });
     expect([...SETTING_KEYS].sort()).toEqual(Object.keys(MODE_PRESETS.manual).sort());
+  });
+
+  it("groups every toggle exactly once for display", () => {
+    const grouped = SETTING_GROUPS.flatMap((group) => group.keys);
+    expect([...grouped].sort()).toEqual([...SETTING_KEYS].sort());
+  });
+
+  it("counts the toggles that are on", () => {
+    expect(enabledCount(MODE_PRESETS.manual)).toBe(
+      SETTING_KEYS.filter((key) => MODE_PRESETS.manual[key]).length,
+    );
+    expect(enabledCount(toggleSetting(newDraft(), "scriptGeneration", true).automationSettings)).toBe(
+      enabledCount(MODE_PRESETS.manual) + (MODE_PRESETS.manual.scriptGeneration ? 0 : 1),
+    );
   });
 
   it("applies the preset when the mode changes, discarding custom toggles", () => {

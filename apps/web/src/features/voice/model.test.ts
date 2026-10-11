@@ -10,7 +10,6 @@ import { describe, expect, it } from "vitest";
 
 import type { VoiceCatalog } from "./api";
 import {
-  canGenerate,
   estimateSummary,
   formatUsd,
   initialVoiceSettings,
@@ -18,6 +17,9 @@ import {
   isVoiceJob,
   jobCoversScene,
   sceneNumbers,
+  sceneVoiceChoices,
+  sceneVoiceOptionLabel,
+  voiceAction,
   voiceOptionLabel,
   voiceOverview,
 } from "./model";
@@ -81,8 +83,12 @@ describe("voice model", () => {
     expect(jobCoversScene(job(), "s1")).toBe(true);
     expect(jobCoversScene(job(), "s2")).toBe(false);
     expect(jobCoversScene(job({ status: "COMPLETED" }), "s1")).toBe(false);
-    expect(canGenerate("missing") && canGenerate("outdated")).toBe(true);
-    expect(canGenerate("current") || canGenerate("uploaded") || canGenerate("empty")).toBe(false);
+    expect(voiceAction("empty")).toBeNull();
+    expect(voiceAction("missing")).toEqual({ label: "Tạo giọng", regenerate: false });
+    expect(voiceAction("outdated")).toEqual({ label: "Tạo lại giọng", regenerate: false });
+    // A matching or uploaded voice can always be replaced by a new take.
+    expect(voiceAction("current")).toEqual({ label: "Tạo lại giọng", regenerate: true });
+    expect(voiceAction("uploaded")).toEqual({ label: "Thay bằng giọng AI", regenerate: true });
   });
 
   it("summarises which scenes need a voice", () => {
@@ -115,5 +121,30 @@ describe("voice model", () => {
     };
     expect(voiceOverview(project)).toEqual({ needed: ["s2", "s3"], missing: 1, outdated: 1 });
     expect(sceneNumbers(project, ["s3", "s1"])).toBe("1, 3");
+  });
+});
+
+describe("scene voice picker", () => {
+  const audio = (id: string, source: MediaAsset["source"], createdAt: string): MediaAsset => ({
+    id,
+    kind: "audio",
+    source,
+    fileName: "giong-canh-03.mp3",
+    path: `media/${id}.mp3`,
+    createdAt,
+  });
+
+  it("labels each take with its origin and time", () => {
+    expect(sceneVoiceOptionLabel(audio("a", "tts", "2026-10-11T07:02:00.000Z"))).toBe(
+      "giong-canh-03.mp3 · AI · 14:02 11/10",
+    );
+    expect(sceneVoiceOptionLabel(audio("b", "upload", "2026-10-11T07:02:00.000Z"))).toContain("tải lên");
+  });
+
+  it("lists only audio files, newest first", () => {
+    const older = audio("old", "tts", "2026-10-11T07:00:00.000Z");
+    const newer = audio("new", "tts", "2026-10-11T08:00:00.000Z");
+    const image: MediaAsset = { ...older, id: "img", kind: "image" };
+    expect(sceneVoiceChoices([older, image, newer]).map((asset) => asset.id)).toEqual(["new", "old"]);
   });
 });

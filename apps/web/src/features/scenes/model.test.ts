@@ -399,6 +399,23 @@ describe("editor reducer: voice", () => {
     expect(state.project.assets.map((a) => a.id)).toEqual(["ast_a", "ast_b", "ast_c"]);
     expect(state.past).toBe(local.past);
   });
+
+  it("picks, clears and undoes a scene's own voice file", () => {
+    const upload: MediaAsset = { ...tts("ast_up"), source: "upload", fileName: "doc-tay.mp3" };
+    const image: MediaAsset = { ...tts("ast_img"), kind: "image", fileName: "anh.jpg" };
+    const start = createEditorState({ ...three().project, assets: [upload, image] });
+
+    const picked = run(start, { type: "setSceneVoice", sceneId: "b", voiceAssetId: "ast_up" });
+    expect(picked.project.scenes.map((s) => s.voiceAssetId)).toEqual([undefined, "ast_up", undefined]);
+
+    const cleared = run(picked, { type: "setSceneVoice", sceneId: "b", voiceAssetId: null });
+    expect("voiceAssetId" in (cleared.project.scenes[1] ?? {})).toBe(false);
+    expect(run(cleared, { type: "undo" }).project.scenes[1]?.voiceAssetId).toBe("ast_up");
+
+    const rejected = run(start, { type: "setSceneVoice", sceneId: "b", voiceAssetId: "ast_img" });
+    expect(rejected.lastError).toMatch(/âm thanh/u);
+    expect(rejected.project.scenes[1]?.voiceAssetId).toBeUndefined();
+  });
 });
 
 describe("editor reducer: AI suggestions", () => {

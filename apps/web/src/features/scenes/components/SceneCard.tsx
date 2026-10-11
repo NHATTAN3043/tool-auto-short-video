@@ -75,7 +75,7 @@ export function SceneCard({
   isFirst: boolean;
   isLast: boolean;
   actions: SceneCardActions;
-  /** Scene voice controls, rendered under the duration row. */
+  /** Scene voice controls, rendered at the top of the scene audio section. */
   voiceSlot?: ReactNode;
   /** Media search for this scene, rendered under the media editor. */
   mediaSearchSlot?: ReactNode;
@@ -85,10 +85,13 @@ export function SceneCard({
   const durationId = `duration-${scene.id}`;
 
   return (
-    <li className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
-          <span className="font-semibold">Cảnh {entry.index + 1}</span>
+    <section
+      aria-label={`Cảnh ${String(entry.index + 1)}`}
+      className="flex min-w-0 flex-col rounded-xl border bg-card"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b px-5 py-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-base font-semibold">Cảnh {entry.index + 1}</h2>
           <span className="font-mono text-sm text-muted-foreground">
             {formatMs(entry.startMs)} → {formatMs(entry.endMs)}
           </span>
@@ -172,7 +175,7 @@ export function SceneCard({
             size="icon-sm"
             aria-label="Xoá cảnh"
             title="Xoá cảnh"
-            className="text-destructive"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
             onClick={() => {
               actions.onDelete(scene.id);
             }}
@@ -182,82 +185,89 @@ export function SceneCard({
         </div>
       </div>
 
-      <Textarea
-        aria-label={`Lời cảnh ${String(entry.index + 1)}`}
-        value={scene.narration}
-        placeholder="Lời đọc của cảnh…"
-        onChange={(event) => {
-          actions.onNarrationChange(scene.id, event.target.value);
-        }}
-        onBlur={actions.onNarrationBlur}
-      />
+      <div className="flex flex-col divide-y">
+        <div className="flex flex-col gap-3 px-5 py-4">
+          <h3 className="text-sm font-semibold">Lời đọc</h3>
+          <Textarea
+            aria-label={`Lời cảnh ${String(entry.index + 1)}`}
+            value={scene.narration}
+            placeholder="Lời đọc của cảnh…"
+            onChange={(event) => {
+              actions.onNarrationChange(scene.id, event.target.value);
+            }}
+            onBlur={actions.onNarrationBlur}
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <Label htmlFor={durationId} className="font-normal text-muted-foreground">
+              Thời lượng (giây)
+            </Label>
+            <DurationField
+              key={scene.durationMs ?? "auto"}
+              id={durationId}
+              durationMs={scene.durationMs}
+              placeholder={`Tự động · ${formatSecondsInput(entry.durationMs)}`}
+              onCommit={(durationMs) => {
+                actions.onDurationCommit(scene.id, durationMs);
+              }}
+            />
+            <span className="text-xs text-muted-foreground">{words} từ · để trống = tự tính</span>
+          </div>
+        </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Label htmlFor={durationId} className="font-normal text-muted-foreground">
-          Thời lượng (giây)
-        </Label>
-        <DurationField
-          key={scene.durationMs ?? "auto"}
-          id={durationId}
-          durationMs={scene.durationMs}
-          placeholder={`Tự động · ${formatSecondsInput(entry.durationMs)}`}
-          onCommit={(durationMs) => {
-            actions.onDurationCommit(scene.id, durationMs);
-          }}
-        />
-        <span className="text-xs text-muted-foreground">{words} từ · để trống = tự tính</span>
+        <div className="flex flex-col gap-3 px-5 py-4">
+          <h3 className="text-sm font-semibold">Media</h3>
+          <SceneMediaEditor
+            projectId={projectId}
+            sceneLabel={`Cảnh ${String(entry.index + 1)}`}
+            media={scene.media}
+            assets={assets}
+            actions={{
+              onAssign: (assetId) => {
+                actions.onAssignMedia(scene.id, assetId);
+              },
+              onChange: (patch) => {
+                actions.onMediaChange(scene.id, patch);
+              },
+              onClear: () => {
+                actions.onClearMedia(scene.id);
+              },
+              onCommit: actions.onMediaCommit,
+            }}
+          />
+          {scene.visualPlan ? (
+            <VisualPlanEditor
+              sceneLabel={`Cảnh ${String(entry.index + 1)}`}
+              visualPlan={scene.visualPlan}
+              onChange={(visualPlan) => {
+                actions.onVisualPlanChange(scene.id, visualPlan);
+              }}
+              onCommit={actions.onNarrationBlur}
+            />
+          ) : null}
+          {mediaSearchSlot}
+        </div>
+
+        <div className="flex flex-col gap-3 px-5 py-4">
+          <h3 className="text-sm font-semibold">Âm thanh của cảnh</h3>
+          {voiceSlot}
+          <SceneSfxEditor
+            projectId={projectId}
+            assets={assets}
+            sfx={scene.sfx}
+            library={sfxLibrary}
+            actions={{
+              onAdd: (librarySfxId) => actions.onAddSfx(scene.id, librarySfxId),
+              onChange: (sfxId, patch) => {
+                actions.onSfxChange(scene.id, sfxId, patch);
+              },
+              onRemove: (sfxId) => {
+                actions.onRemoveSfx(scene.id, sfxId);
+              },
+              onCommit: actions.onMediaCommit,
+            }}
+          />
+        </div>
       </div>
-
-      {voiceSlot}
-
-      {scene.visualPlan ? (
-        <VisualPlanEditor
-          sceneLabel={`Cảnh ${String(entry.index + 1)}`}
-          visualPlan={scene.visualPlan}
-          onChange={(visualPlan) => {
-            actions.onVisualPlanChange(scene.id, visualPlan);
-          }}
-          onCommit={actions.onNarrationBlur}
-        />
-      ) : null}
-
-      <SceneMediaEditor
-        projectId={projectId}
-        sceneLabel={`Cảnh ${String(entry.index + 1)}`}
-        media={scene.media}
-        assets={assets}
-        actions={{
-          onAssign: (assetId) => {
-            actions.onAssignMedia(scene.id, assetId);
-          },
-          onChange: (patch) => {
-            actions.onMediaChange(scene.id, patch);
-          },
-          onClear: () => {
-            actions.onClearMedia(scene.id);
-          },
-          onCommit: actions.onMediaCommit,
-        }}
-      />
-
-      {mediaSearchSlot}
-
-      <SceneSfxEditor
-        projectId={projectId}
-        assets={assets}
-        sfx={scene.sfx}
-        library={sfxLibrary}
-        actions={{
-          onAdd: (librarySfxId) => actions.onAddSfx(scene.id, librarySfxId),
-          onChange: (sfxId, patch) => {
-            actions.onSfxChange(scene.id, sfxId, patch);
-          },
-          onRemove: (sfxId) => {
-            actions.onRemoveSfx(scene.id, sfxId);
-          },
-          onCommit: actions.onMediaCommit,
-        }}
-      />
-    </li>
+    </section>
   );
 }

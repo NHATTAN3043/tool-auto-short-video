@@ -43,6 +43,13 @@
       "when": 1791606886388,
       "tag": "0005_full_ai_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791718558269,
+      "tag": "0006_tts_job_options",
+      "breakpoints": true
     }
   ]
 }

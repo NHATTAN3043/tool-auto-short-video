@@ -26,6 +26,15 @@ export interface SynthesizedSpeech {
   extension: string;
 }
 
+/**
+ * Narration around the text being spoken, so a voice split into scenes keeps one pace and tone. Context
+ * only: it is not spoken. Providers that cannot use it ignore it.
+ */
+export interface SpeechContext {
+  previousText?: string;
+  nextText?: string;
+}
+
 /** A text-to-speech provider. Paid: only called from the worker or a server route, never the browser. */
 export interface TtsPort {
   /** Stored in VoiceSettings.provider. */
@@ -35,5 +44,5 @@ export interface TtsPort {
   listVoices(): Promise<TtsVoice[]>;
   /** Pure estimate, no network call. */
   estimate(text: string, voice: VoiceSettings): TtsEstimate;
-  synthesize(text: string, voice: VoiceSettings): Promise<SynthesizedSpeech>;
+  synthesize(text: string, voice: VoiceSettings, context?: SpeechContext): Promise<SynthesizedSpeech>;
 }

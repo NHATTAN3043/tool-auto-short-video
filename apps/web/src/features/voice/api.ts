@@ -29,24 +29,42 @@ export const VoiceEstimateSchema = z.object({
 export type VoiceEstimate = z.infer<typeof VoiceEstimateSchema>;
 
 const projectBase = (projectId: string) => `/api/projects/${encodeURIComponent(projectId)}`;
-const body = (sceneIds?: readonly string[]) => JSON.stringify(sceneIds ? { sceneIds } : {});
+const body = (sceneIds?: readonly string[], regenerate = false) =>
+  JSON.stringify({ ...(sceneIds && { sceneIds }), ...(regenerate && { regenerate }) });
 
 export function fetchVoiceCatalog(): Promise<VoiceCatalog> {
   return request("/api/voices", { method: "GET" }, VoiceCatalogSchema);
 }
 
-export function estimateVoices(projectId: string, sceneIds?: readonly string[]): Promise<VoiceEstimate> {
+export function estimateVoices(
+  projectId: string,
+  sceneIds?: readonly string[],
+  regenerate = false,
+): Promise<VoiceEstimate> {
   return request(
     `${projectBase(projectId)}/voices/estimate`,
-    { method: "POST", body: body(sceneIds) },
+    { method: "POST", body: body(sceneIds, regenerate) },
     VoiceEstimateSchema,
   );
 }
 
-export function requestVoices(projectId: string, sceneIds?: readonly string[]): Promise<RenderJob> {
+export function requestVoices(
+  projectId: string,
+  sceneIds?: readonly string[],
+  regenerate = false,
+): Promise<RenderJob> {
   return request(
     `${projectBase(projectId)}/voices`,
-    { method: "POST", body: body(sceneIds) },
+    { method: "POST", body: body(sceneIds, regenerate) },
+    RenderJobSchema,
+  );
+}
+
+/** Queues the free job that balances the loudness of the project's AI voices. */
+export function requestVoiceLoudness(projectId: string): Promise<RenderJob> {
+  return request(
+    `${projectBase(projectId)}/voices/loudness`,
+    { method: "POST", body: body() },
     RenderJobSchema,
   );
 }

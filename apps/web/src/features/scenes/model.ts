@@ -84,6 +84,7 @@ export type EditorAction =
   | { type: "updateSfx"; sceneId: string; sfxId: string; patch: SceneSfxPatch }
   | { type: "removeSfx"; sceneId: string; sfxId: string }
   | { type: "setVoice"; assetId: string | null }
+  | { type: "setSceneVoice"; sceneId: string; voiceAssetId: string | null }
   | { type: "setMusic"; music: Music | null }
   | { type: "updateStyle"; patch: StylePatch }
   | { type: "setVoiceSettings"; settings: VoiceSettings | null }
@@ -184,6 +185,7 @@ function failureMessage(action: ContentAction): string {
     case "updateMedia":
       return "Đoạn video không hợp lệ: điểm kết thúc phải sau điểm bắt đầu.";
     case "setVoice":
+    case "setSceneVoice":
     case "setMusic":
     case "addSfx":
       return "Chỉ chọn được file âm thanh.";
@@ -252,6 +254,8 @@ function applyContent(project: Project, action: ContentAction, ctx: DomainContex
       return removeSceneSfx(project, action.sceneId, action.sfxId);
     case "setVoice":
       return setProjectVoice(project, action.assetId);
+    case "setSceneVoice":
+      return updateScene(project, action.sceneId, { voiceAssetId: action.voiceAssetId });
     case "setMusic":
       return setMusic(project, action.music);
     case "updateStyle":

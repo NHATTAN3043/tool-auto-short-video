@@ -1,4 +1,9 @@
 export { ZipArchive } from "./archive-zip/zip-archive";
+export {
+  FfmpegAudioNormalizer,
+  TARGET_LUFS,
+  type FfmpegAudioNormalizerOptions,
+} from "./ffmpeg/ffmpeg-audio-normalizer";
 export { FfmpegClipCutter, type FfmpegClipCutterOptions } from "./ffmpeg/ffmpeg-clip-cutter";
 export { FfmpegMediaProbe, type FfmpegOptions } from "./ffmpeg/ffmpeg-media-probe";
 export { FileJobQueue } from "./queue-file/file-job-queue";

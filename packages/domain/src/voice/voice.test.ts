@@ -6,7 +6,13 @@ import { asset, project, scene } from "../testing/fixtures";
 import { voiceContentHash } from "./content-hash";
 import { setSceneVoice, setVoiceSettings, setVoiceTrack } from "./operations";
 import type { VoiceSettings } from "./schema";
-import { activeVoiceTrack, hasVoiceConflict, sceneVoiceStatus, scenesNeedingVoice } from "./voice-status";
+import {
+  activeVoiceTrack,
+  hasVoiceConflict,
+  sceneVoiceStatus,
+  scenesNeedingLoudness,
+  scenesNeedingVoice,
+} from "./voice-status";
 
 const settings: VoiceSettings = {
   provider: "elevenlabs",
@@ -130,5 +136,25 @@ describe("voice operations", () => {
     expect(ProjectSchema.parse(withVoice)).toEqual(withVoice);
     expect(() => setVoiceSettings(base, { ...settings, speed: 3 })).toThrow(DomainError);
     expect("voice" in setVoiceSettings(withVoice, null)).toBe(false);
+  });
+});
+
+describe("scenesNeedingLoudness", () => {
+  it("lists generated voices not yet normalized, never uploaded ones", () => {
+    const p = project({
+      scenes: [
+        scene("a", "Một.", { voiceAssetId: "tts_raw" }),
+        scene("b", "Hai.", { voiceAssetId: "tts_done" }),
+        scene("c", "Ba.", { voiceAssetId: "upload" }),
+        scene("d", "Bốn."),
+      ],
+      assets: [
+        asset("tts_raw", "audio", { source: "tts" }),
+        asset("tts_done", "audio", { source: "tts", loudnessNormalized: true }),
+        asset("upload", "audio"),
+      ],
+    });
+    expect(scenesNeedingLoudness(p)).toEqual(["a"]);
+    expect(scenesNeedingLoudness(p, ["b", "c"])).toEqual([]);
   });
 });

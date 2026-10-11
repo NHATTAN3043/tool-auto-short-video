@@ -8,41 +8,9 @@ import { Label } from "@/shared/ui/label";
 import { Slider } from "@/shared/ui/slider";
 
 import { projectFileUrl } from "../api";
-import { formatClock, formatPercent } from "../format";
+import { formatPercent } from "../format";
 import { DEFAULT_MUSIC_VOLUME } from "../labels";
-
-const NONE = "";
-
-function AudioSelect({
-  id,
-  audios,
-  value,
-  onChange,
-}: {
-  id: string;
-  audios: readonly MediaAsset[];
-  value: string | undefined;
-  onChange: (assetId: string | null) => void;
-}) {
-  return (
-    <select
-      id={id}
-      className="h-9 w-full rounded-md border bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      value={value ?? NONE}
-      onChange={(event) => {
-        onChange(event.target.value === NONE ? null : event.target.value);
-      }}
-    >
-      <option value={NONE}>Không dùng</option>
-      {audios.map((asset) => (
-        <option key={asset.id} value={asset.id}>
-          {asset.fileName}
-          {asset.durationMs !== undefined ? ` (${formatClock(asset.durationMs)})` : ""}
-        </option>
-      ))}
-    </select>
-  );
-}
+import { AudioSelect } from "./AudioSelect";
 
 /** The one voice file for the whole video and the background music with its volume. */
 export function AudioSettings({

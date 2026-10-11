@@ -1,5 +1,12 @@
 import type { VoiceSettings } from "@studio/domain";
-import type { SynthesizedSpeech, TtsEstimate, TtsModel, TtsPort, TtsVoice } from "@studio/services";
+import type {
+  SpeechContext,
+  SynthesizedSpeech,
+  TtsEstimate,
+  TtsModel,
+  TtsPort,
+  TtsVoice,
+} from "@studio/services";
 import { z } from "zod";
 
 export const ELEVENLABS_PROVIDER_ID = "elevenlabs";
@@ -14,6 +21,8 @@ export const ELEVENLABS_MODELS: readonly TtsModel[] = [
 ];
 
 const OUTPUT_FORMAT = "mp3_44100_128";
+/** Request stitching (previous/next context) is not available for these models (ElevenLabs docs). */
+const MODELS_WITHOUT_CONTEXT = new Set(["eleven_v3"]);
 const MAX_RETRIES = 2;
 
 export interface ElevenLabsTtsOptions {
@@ -89,7 +98,9 @@ export class ElevenLabsTts implements TtsPort {
     return { characters, credits, usd: credits * this.options.usdPerCredit };
   }
 
-  async synthesize(text: string, voice: VoiceSettings): Promise<SynthesizedSpeech> {
+  async synthesize(text: string, voice: VoiceSettings, context?: SpeechContext): Promise<SynthesizedSpeech> {
+    // The narration around this scene keeps pace and tone even across scenes generated one by one.
+    const withContext = context !== undefined && !MODELS_WITHOUT_CONTEXT.has(voice.modelId);
     const response = await this.request(
       `/v1/text-to-speech/${encodeURIComponent(voice.voiceId)}?output_format=${OUTPUT_FORMAT}`,
       {
@@ -103,6 +114,8 @@ export class ElevenLabsTts implements TtsPort {
             similarity_boost: voice.similarityBoost,
             speed: voice.speed,
           },
+          ...(withContext && context.previousText && { previous_text: context.previousText }),
+          ...(withContext && context.nextText && { next_text: context.nextText }),
         }),
       },
     );

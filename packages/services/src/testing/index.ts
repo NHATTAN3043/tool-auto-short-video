@@ -1,6 +1,7 @@
 export {
   FakeAi,
   FakeArchive,
+  FakeAudioNormalizer,
   FakeClipCutter,
   FakeCostGuard,
   FakeClock,

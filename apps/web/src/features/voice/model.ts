@@ -4,6 +4,7 @@ import {
   initialVoiceSettings as initialDomainVoiceSettings,
   scenesNeedingVoice,
   sceneVoiceStatus,
+  type MediaAsset,
   type Project,
   type RenderJob,
   type SceneVoiceStatus,
@@ -84,8 +85,26 @@ export function jobCoversScene(job: RenderJob | null, sceneId: string): boolean 
   return job !== null && isRunning(job) && job.sceneIds?.includes(sceneId) === true;
 }
 
-export function canGenerate(status: SceneVoiceStatus): boolean {
-  return status === "missing" || status === "outdated";
+export interface SceneVoiceAction {
+  label: string;
+  /** The voice still matches (or is an uploaded file): the run must ask for a new take. */
+  regenerate: boolean;
+}
+
+/** What the voice button of a scene does; null when the scene has no narration to read. */
+export function voiceAction(status: SceneVoiceStatus): SceneVoiceAction | null {
+  switch (status) {
+    case "empty":
+      return null;
+    case "missing":
+      return { label: "Tạo giọng", regenerate: false };
+    case "outdated":
+      return { label: "Tạo lại giọng", regenerate: false };
+    case "current":
+      return { label: "Tạo lại giọng", regenerate: true };
+    case "uploaded":
+      return { label: "Thay bằng giọng AI", regenerate: true };
+  }
 }
 
 export interface VoiceOverview {
@@ -111,4 +130,34 @@ export function sceneNumbers(project: Project, sceneIds: readonly string[]): str
   return project.scenes
     .flatMap((scene, index) => (wanted.has(scene.id) ? [String(index + 1)] : []))
     .join(", ");
+}
+
+const TAKE_TIME = new Intl.DateTimeFormat("vi-VN", {
+  hour: "2-digit",
+  hourCycle: "h23",
+  minute: "2-digit",
+  day: "2-digit",
+  month: "2-digit",
+  timeZone: "Asia/Ho_Chi_Minh",
+});
+
+/**
+ * One line of the scene voice picker: `giong-canh-03.mp3 · AI · 14:02 11/10`. The time tells apart the
+ * takes of one scene, which all share a file name.
+ */
+export function sceneVoiceOptionLabel(asset: MediaAsset): string {
+  const origin = asset.source === "tts" ? "AI" : "tải lên";
+  // Built from parts: the separators of the vi-VN pattern differ between ICU builds (Node vs browsers).
+  const part = Object.fromEntries(
+    TAKE_TIME.formatToParts(new Date(asset.createdAt)).map((item) => [item.type, item.value]),
+  );
+  const time = `${part.hour ?? ""}:${part.minute ?? ""} ${part.day ?? ""}/${part.month ?? ""}`;
+  return `${asset.fileName} · ${origin} · ${time}`;
+}
+
+/** Audio files a scene can use as its voice, newest first so the latest take is at hand. */
+export function sceneVoiceChoices(assets: readonly MediaAsset[]): MediaAsset[] {
+  return assets
+    .filter((asset) => asset.kind === "audio")
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }

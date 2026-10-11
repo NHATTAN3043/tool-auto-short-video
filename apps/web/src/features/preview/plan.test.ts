@@ -1,7 +1,7 @@
 import { createProject, scriptToScenes, type Project, type SceneMedia } from "@studio/domain";
 import { describe, expect, it } from "vitest";
 
-import { previewPlan, sceneStartFrame } from "./plan";
+import { previewPlan, sceneStartFrame, sceneViewFrame } from "./plan";
 
 const media: SceneMedia = {
   assetId: "ast_1",
@@ -57,5 +57,27 @@ describe("preview plan", () => {
     expect(sceneStartFrame(result.plan, "scn_2")).toBe(result.plan.scenes[1]?.from);
     expect(sceneStartFrame(result.plan, "scn_2")).toBeGreaterThan(0);
     expect(sceneStartFrame(result.plan, "nope")).toBeNull();
+  });
+
+  it("opens a scene after its fade-in, where it is fully visible", () => {
+    const result = previewPlan(project());
+    if (!result.ok) throw new Error(result.error);
+    const { plan } = result;
+    const second = plan.scenes[1];
+    if (!second) throw new Error("expected two scenes");
+    expect(plan.transitionFrames).toBeGreaterThan(0);
+    expect(sceneViewFrame(plan, "scn_1")).toBe(0);
+    expect(sceneViewFrame(plan, "scn_2")).toBe(
+      second.from + Math.min(plan.transitionFrames, second.durationInFrames - 1),
+    );
+    expect(sceneViewFrame(plan, "nope")).toBeNull();
+  });
+
+  it("opens a scene on its first frame when there is no fade", () => {
+    const base = project();
+    const result = previewPlan({ ...base, style: { ...base.style, transition: "none" } });
+    if (!result.ok) throw new Error(result.error);
+    expect(result.plan.transitionFrames).toBe(0);
+    expect(sceneViewFrame(result.plan, "scn_2")).toBe(result.plan.scenes[1]?.from);
   });
 });

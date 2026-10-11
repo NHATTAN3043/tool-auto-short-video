@@ -2,6 +2,7 @@ import {
   DomainError,
   narrationForSpeech,
   scenesNeedingVoice,
+  sceneVoiceStatus,
   type BudgetCheck,
   type Project,
 } from "@studio/domain";
@@ -21,6 +22,25 @@ export interface SceneVoicesInput {
   projectId: string;
   /** Default: every scene. */
   sceneIds?: readonly string[];
+  /**
+   * Make a new take of every requested scene that has narration, even when its voice still matches or
+   * is an uploaded file. Default: only missing or outdated voices.
+   */
+  regenerate?: boolean;
+}
+
+/** Scenes a voice run covers, in scene order: changed voices, or with `regenerate` every scene with words. */
+export function scenesToVoice(
+  project: Project,
+  sceneIds: readonly string[] | undefined,
+  regenerate: boolean,
+): string[] {
+  if (!regenerate) return scenesNeedingVoice(project, sceneIds);
+  const wanted = sceneIds === undefined ? null : new Set(sceneIds);
+  return project.scenes
+    .filter((scene) => wanted === null || wanted.has(scene.id))
+    .filter((scene) => sceneVoiceStatus(project, scene) !== "empty")
+    .map((scene) => scene.id);
 }
 
 export function requireVoiceSettings(project: Project): NonNullable<Project["voice"]> {
@@ -39,7 +59,7 @@ export function makeEstimateSceneVoices(deps: {
   return async (input: SceneVoicesInput): Promise<SceneVoicesEstimate> => {
     const project = await deps.repo.get(input.projectId);
     const voice = requireVoiceSettings(project);
-    const sceneIds = scenesNeedingVoice(project, input.sceneIds);
+    const sceneIds = scenesToVoice(project, input.sceneIds, input.regenerate === true);
     const texts = project.scenes
       .filter((scene) => sceneIds.includes(scene.id))
       .map((scene) => narrationForSpeech(scene.narration));

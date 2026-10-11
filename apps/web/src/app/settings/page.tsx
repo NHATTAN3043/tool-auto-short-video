@@ -11,5 +11,9 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const container = getContainer();
   const [view, report] = await Promise.all([container.getBudgetSettings(), container.getUsageReport()]);
-  return <BudgetSettingsPage view={view} report={report} />;
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-8">
+      <BudgetSettingsPage view={view} report={report} />
+    </div>
+  );
 }

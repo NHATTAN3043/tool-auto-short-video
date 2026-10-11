@@ -21,3 +21,15 @@ export function previewPlan(project: Project): PreviewPlan {
 export function sceneStartFrame(plan: RenderPlan, sceneId: string): number | null {
   return plan.scenes.find((scene) => scene.sceneId === sceneId)?.from ?? null;
 }
+
+/**
+ * First frame where the scene is fully visible, for "Xem cảnh này". With a fade transition a scene starts at
+ * opacity 0 over the previous one, so its very first frame shows the previous scene (or black while that
+ * video is still loading). Never past the scene's own slot.
+ */
+export function sceneViewFrame(plan: RenderPlan, sceneId: string): number | null {
+  const scene = plan.scenes.find((candidate) => candidate.sceneId === sceneId);
+  if (!scene) return null;
+  if (scene.index === 0) return scene.from;
+  return scene.from + Math.min(plan.transitionFrames, Math.max(0, scene.durationInFrames - 1));
+}

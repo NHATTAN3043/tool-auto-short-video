@@ -8,14 +8,16 @@ import {
   voiceContentHash,
   type IdGenerator,
   type MediaAsset,
+  type Scene,
 } from "@studio/domain";
 
+import type { AudioNormalizerPort } from "../ports/audio-normalizer";
 import type { Clock } from "../ports/clock";
 import type { PaidPortFactory } from "../ports/cost-guard";
 import type { MediaProbePort } from "../ports/media-probe";
 import type { ProjectRepository } from "../ports/project-repository";
 import type { StoragePort } from "../ports/storage";
-import type { TtsPort } from "../ports/tts";
+import type { SpeechContext, TtsPort } from "../ports/tts";
 
 export interface GenerateSceneVoicesDeps {
   repo: ProjectRepository;
@@ -24,12 +26,16 @@ export interface GenerateSceneVoicesDeps {
   /** Bound to the project and job, so CostGuard checks and logs every scene's call. */
   tts: PaidPortFactory<TtsPort>;
   clock: Clock;
+  /** Evens out each new voice's loudness. Null without ffmpeg: voices are stored as the provider made them. */
+  normalizer?: AudioNormalizerPort | null;
   newId?: IdGenerator;
 }
 
 export interface GenerateSceneVoicesInput {
   projectId: string;
   sceneIds: readonly string[];
+  /** New take even when the voice still matches or is an uploaded file; scenes without words are skipped. */
+  regenerate?: boolean;
   /** The `tts` job, for the usage log. */
   jobId?: string;
   /** 0..1 after each scene. */
@@ -49,6 +55,38 @@ async function* bytes(data: Uint8Array): AsyncIterable<Uint8Array> {
 }
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/** Narration of the scenes around `index`, so each scene is read in the pace of the whole video. */
+export function speechContext(scenes: readonly Scene[], index: number): SpeechContext {
+  const around = (offset: number) => narrationForSpeech(scenes[index + offset]?.narration ?? "");
+  const previousText = around(-1);
+  const nextText = around(1);
+  return { ...(previousText !== "" && { previousText }), ...(nextText !== "" && { nextText }) };
+}
+
+/**
+ * Writes the provider's audio to `key`, loudness-normalized when a normalizer is configured. The raw file is
+ * a temporary sibling. A failed normalization keeps the audio as it came: it is paid for, and the scene can
+ * still be balanced later. Returns whether the stored file is normalized.
+ */
+async function storeSpeech(deps: GenerateSceneVoicesDeps, key: string, audio: Uint8Array): Promise<boolean> {
+  if (!deps.normalizer) {
+    await deps.storage.write(key, bytes(audio));
+    return false;
+  }
+  const withExtension = key.replace(/(\.[^./]+)$/u, ".raw$1");
+  const rawKey = withExtension === key ? `${key}.raw` : withExtension;
+  await deps.storage.write(rawKey, bytes(audio));
+  try {
+    await deps.normalizer.normalize(deps.storage.resolvePath(rawKey), await deps.storage.pathForWrite(key));
+    return true;
+  } catch {
+    await deps.storage.write(key, bytes(audio));
+    return false;
+  } finally {
+    await deps.storage.remove(rawKey);
+  }
+}
 
 /**
  * Generates one voice file per scene, scene by scene. Each scene is saved as soon as it is done, so a
@@ -85,7 +123,9 @@ export function makeGenerateSceneVoices(deps: GenerateSceneVoicesDeps) {
       const index = project.scenes.findIndex((candidate) => candidate.id === sceneId);
       const scene = project.scenes[index];
       const status = scene ? sceneVoiceStatus(project, scene) : "empty";
-      if (!scene || (status !== "missing" && status !== "outdated")) {
+      const wanted =
+        input.regenerate === true ? status !== "empty" : status === "missing" || status === "outdated";
+      if (!scene || !wanted) {
         result.skipped.push(sceneId);
         step();
         continue;
@@ -94,10 +134,14 @@ export function makeGenerateSceneVoices(deps: GenerateSceneVoicesDeps) {
       const assetId = (deps.newId ?? newId)("ast");
       let key: string | null = null;
       try {
-        const speech = await tts.synthesize(narrationForSpeech(scene.narration), voice);
+        const speech = await tts.synthesize(
+          narrationForSpeech(scene.narration),
+          voice,
+          speechContext(project.scenes, index),
+        );
         const path = `media/${assetId}.${speech.extension}`;
         key = `projects/${input.projectId}/${path}`;
-        await deps.storage.write(key, bytes(speech.audio));
+        const normalized = await storeSpeech(deps, key, speech.audio);
         const probed = await deps.probe.probe(deps.storage.resolvePath(key));
         if (probed.kind !== "audio") throw new Error(`The provider returned ${probed.kind}, not audio`);
 
@@ -109,6 +153,7 @@ export function makeGenerateSceneVoices(deps: GenerateSceneVoicesDeps) {
           path,
           contentHash: voiceContentHash(scene.narration, voice),
           createdAt: deps.clock.now(),
+          ...(normalized && { loudnessNormalized: true }),
         };
         if (probed.durationMs !== undefined) asset.durationMs = probed.durationMs;
 

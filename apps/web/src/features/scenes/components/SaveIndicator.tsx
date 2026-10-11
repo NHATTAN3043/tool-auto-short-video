@@ -1,7 +1,8 @@
 "use client";
 
-import { Undo2Icon } from "lucide-react";
+import { CheckIcon, CircleAlertIcon, LoaderCircleIcon, Undo2Icon } from "lucide-react";
 
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 
 import type { AutosaveStatus } from "../autosave";
@@ -12,6 +13,12 @@ const STATUS_TEXT: Record<AutosaveStatus, string> = {
   saving: "Đang lưu…",
   saved: "Đã lưu",
   error: "Lỗi khi lưu",
+};
+
+const STATUS_ICON: Partial<Record<AutosaveStatus, typeof CheckIcon>> = {
+  saving: LoaderCircleIcon,
+  saved: CheckIcon,
+  error: CircleAlertIcon,
 };
 
 export function SaveIndicator({
@@ -25,12 +32,17 @@ export function SaveIndicator({
   onUndo: () => void;
   onRetry: () => void;
 }) {
+  const Icon = STATUS_ICON[status];
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2">
       <span
-        className={status === "error" ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
+        className={cn(
+          "inline-flex items-center gap-1.5 text-sm whitespace-nowrap",
+          status === "error" ? "text-destructive" : "text-muted-foreground",
+        )}
         aria-live="polite"
       >
+        {Icon ? <Icon className={cn("size-4", status === "saving" && "animate-spin")} /> : null}
         {STATUS_TEXT[status]}
       </span>
       {status === "error" ? (
@@ -38,9 +50,15 @@ export function SaveIndicator({
           Thử lại
         </Button>
       ) : null}
-      <Button variant="outline" size="sm" disabled={!canUndo} onClick={onUndo}>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Hoàn tác"
+        title="Hoàn tác"
+        disabled={!canUndo}
+        onClick={onUndo}
+      >
         <Undo2Icon />
-        Hoàn tác
       </Button>
     </div>
   );

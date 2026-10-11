@@ -3,6 +3,7 @@ export type { JobFilter, JobQueuePort, RenderJobPatch } from "./ports/job-queue"
 export type { MediaProbePort, ProbeResult, ThumbnailOptions } from "./ports/media-probe";
 export type { ProjectRepository, ProjectSummary } from "./ports/project-repository";
 export type { ArchiveEntry, ArchivePort } from "./ports/archive";
+export type { AudioNormalizerPort } from "./ports/audio-normalizer";
 export type { ClipCutterPort, ClipRange } from "./ports/clip-cutter";
 export type { RendererPort, RenderRequest } from "./ports/renderer";
 export type { SfxLibraryRepository } from "./ports/sfx-library";
@@ -18,7 +19,7 @@ export {
   type AiPort,
   type RankImage,
 } from "./ports/ai";
-export type { SynthesizedSpeech, TtsEstimate, TtsModel, TtsPort, TtsVoice } from "./ports/tts";
+export type { SpeechContext, SynthesizedSpeech, TtsEstimate, TtsModel, TtsPort, TtsVoice } from "./ports/tts";
 export type {
   ApiUsageLog,
   BudgetSettingsStore,
@@ -87,6 +88,11 @@ export {
   type SceneVoicesInput,
 } from "./voice/estimate-scene-voices";
 export { makeRequestSceneVoices } from "./voice/request-scene-voices";
+export {
+  makeNormalizeSceneVoices,
+  makeRequestVoiceLoudness,
+  type NormalizeSceneVoicesInput,
+} from "./voice/normalize-scene-voices";
 export { makeListTtsVoices, type TtsCatalog } from "./voice/list-tts-voices";
 export {
   makeEstimateAiTask,

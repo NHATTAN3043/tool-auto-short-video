@@ -45,6 +45,8 @@ export const renderJobs = pgTable(
     ai: jsonb("ai").$type<unknown>(),
     /** Request, steps and cost of a `full_ai` job; validated by RenderJobSchema on read. */
     fullAi: jsonb("full_ai").$type<unknown>(),
+    /** Options of a `tts` job (regenerate, loudness only); validated by RenderJobSchema on read. */
+    voice: jsonb("voice").$type<unknown>(),
     status: text("status").notNull(),
     progress: doublePrecision("progress").notNull(),
     outputPath: text("output_path"),

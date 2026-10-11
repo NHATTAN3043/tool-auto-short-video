@@ -108,7 +108,8 @@ export function RenderPanel({ project, flushSave }: { project: Project; flushSav
           </ul>
         ) : null}
 
-        <div className="grid gap-2 sm:grid-cols-2">
+        {/* One button per line: the panel lives in the 320px preview column. */}
+        <div className="grid gap-2">
           <Button
             onClick={() => {
               void renders.start("video");

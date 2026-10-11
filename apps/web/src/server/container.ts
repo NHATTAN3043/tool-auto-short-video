@@ -61,6 +61,7 @@ import {
   makeRequestAiTask,
   makeRequestRender,
   makeRequestSceneVoices,
+  makeRequestVoiceLoudness,
   makeSaveProject,
   makeUseLibrarySfxInProject,
   systemClock,
@@ -177,6 +178,8 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}) {
     listTtsVoices: tts ? makeListTtsVoices({ tts }) : null,
     estimateSceneVoices: tts ? makeEstimateSceneVoices({ repo, tts, costGuard }) : null,
     requestSceneVoices: tts ? makeRequestSceneVoices({ repo, queue, tts, costGuard, clock }) : null,
+    /** Free loudness balancing of existing AI voices; the worker runs it with ffmpeg, no TTS key needed. */
+    requestVoiceLoudness: makeRequestVoiceLoudness({ repo, queue, clock }),
     // AI runs in the worker; the server only estimates (free token count), queues and reads results.
     estimateAiTask: aiDeps ? makeEstimateAiTask(aiDeps) : null,
     requestAiTask: aiDeps ? makeRequestAiTask(aiDeps) : null,

@@ -1,19 +1,26 @@
 "use client";
 
 import { AutomationModeSchema, type AutomationMode } from "@studio/domain";
+import { CircleCheckIcon, KeyRoundIcon } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { Label } from "@/shared/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/shared/ui/radio-group";
 
-import { MODE_LABELS } from "../labels";
+import { MODE_LABELS, MODE_REQUIREMENTS } from "../labels";
 
 export function ModePicker({
   value,
   onChange,
+  layout = "row",
+  showRequirements = false,
 }: {
   value: AutomationMode;
   onChange: (mode: AutomationMode) => void;
+  /** "row": three cards side by side from `sm`; "stack": one card per line. */
+  layout?: "row" | "stack";
+  /** Adds a line under each card saying whether the mode needs an API key. */
+  showRequirements?: boolean;
 }) {
   return (
     <RadioGroup
@@ -21,7 +28,7 @@ export function ModePicker({
       onValueChange={(next) => {
         onChange(AutomationModeSchema.parse(next));
       }}
-      className="grid gap-3 sm:grid-cols-3"
+      className={cn("grid gap-3", layout === "row" && "sm:grid-cols-3")}
     >
       {AutomationModeSchema.options.map((mode) => (
         <Label
@@ -37,6 +44,16 @@ export function ModePicker({
             {MODE_LABELS[mode].title}
           </span>
           <span className="text-sm text-muted-foreground">{MODE_LABELS[mode].description}</span>
+          {showRequirements ? (
+            <span className="mt-auto inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              {mode === "manual" ? (
+                <CircleCheckIcon className="size-3.5" />
+              ) : (
+                <KeyRoundIcon className="size-3.5" />
+              )}
+              {MODE_REQUIREMENTS[mode]}
+            </span>
+          ) : null}
         </Label>
       ))}
     </RadioGroup>
