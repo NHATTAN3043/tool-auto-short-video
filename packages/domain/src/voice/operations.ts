@@ -38,8 +38,8 @@ export function setVoiceTrack(project: Project, track: VoiceTrack): Project {
   return { ...project, voiceTrack: VoiceTrackSchema.parse(track) };
 }
 
-/** Defaults of ElevenLabs' own voice settings. */
-export const DEFAULT_VOICE_TUNING = { stability: 0.5, similarityBoost: 0.75, speed: 1 } as const;
+/** Tuning a new voice starts from: ElevenLabs' own defaults, except stability at its maximum. */
+export const DEFAULT_VOICE_TUNING = { stability: 1, similarityBoost: 0.75, speed: 1 } as const;
 
 /**
  * Settings a project starts from: the configured default voice and model, else the first ones of the

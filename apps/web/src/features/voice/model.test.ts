@@ -51,7 +51,7 @@ describe("voice model", () => {
       provider: "elevenlabs",
       voiceId: "a",
       modelId: "eleven_flash_v2_5",
-      stability: 0.5,
+      stability: 1,
       similarityBoost: 0.75,
       speed: 1,
     });
