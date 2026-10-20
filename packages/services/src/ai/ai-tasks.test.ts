@@ -14,6 +14,7 @@ import {
   FakeAi,
   FakeClock,
   FakeCostGuard,
+  FakeSkillCatalog,
   InMemoryJobQueue,
   InMemoryProjectRepository,
   InMemoryStorage,
@@ -38,8 +39,11 @@ async function setup(options: { settings?: AutomationSettings } = {}) {
     ...(options.settings && { automationSettings: options.settings }),
   });
   let jobs = 0;
-  const deps = { repo, ai, queue, clock, costGuard };
-  const runAiTask = makeRunAiTask({ ai: () => ai, storage });
+  const skills = new FakeSkillCatalog([
+    { id: "viral-hooks", name: "viral-hooks", description: "Hooks", language: "en" },
+  ]);
+  const deps = { repo, ai, queue, clock, costGuard, skills };
+  const runAiTask = makeRunAiTask({ ai: () => ai, storage, skills });
   return {
     costGuard,
     repo,
@@ -47,6 +51,7 @@ async function setup(options: { settings?: AutomationSettings } = {}) {
     clock,
     queue,
     ai,
+    skills,
     estimate: makeEstimateAiTask(deps),
     request: makeRequestAiTask({ ...deps, newId: () => `job_${String(++jobs)}` }),
     getResult: makeGetAiResult({ queue, storage }),
@@ -86,6 +91,20 @@ describe("AI tasks", () => {
       code: "INVALID_OPERATION",
     });
     await expect(s.request({ projectId: "prj_1", task: scenesTask })).resolves.toMatchObject({ kind: "ai" });
+  });
+
+  it("suggests keywords for one scene even in Manual mode, when the user asks from that scene", async () => {
+    const s = await setup({ settings: { ...MODE_PRESETS.manual } });
+    const scenes = [{ id: "scn_1", narration: "Mèo con chơi đùa trong vườn." }];
+    await expect(
+      s.request({ projectId: "prj_1", task: { type: "visual", input: { script: "", scenes } } }),
+    ).rejects.toMatchObject({ code: "INVALID_OPERATION" });
+    await expect(
+      s.request({
+        projectId: "prj_1",
+        task: { type: "visual", input: { script: "", scenes, onDemand: true } },
+      }),
+    ).resolves.toMatchObject({ kind: "ai" });
   });
 
   it("queues a job that records the worst case, and returns the same job for the same task", async () => {
@@ -233,5 +252,106 @@ describe("AI tasks", () => {
       clock: s.clock,
     });
     expect((await run())?.errorMessage).toContain("ANTHROPIC_API_KEY");
+  });
+
+  it("sends the skill a rewrite names, counted in the estimate", async () => {
+    const s = await setup();
+    const task: AiTask = {
+      type: "rewrite_scene",
+      input: { script: "", narration: "Mèo ngủ rất nhiều mỗi ngày.", skillId: "viral-hooks" },
+    };
+    await s.estimate({ projectId: "prj_1", task });
+    expect(s.ai.estimateGuidance.map((guidance) => guidance?.id)).toEqual(["viral-hooks"]);
+    await s.request({ projectId: "prj_1", task });
+    expect(await s.run()).toMatchObject({ status: "COMPLETED" });
+    expect(s.ai.guidance.map((guidance) => guidance?.content)).toEqual(["Hướng dẫn của viral-hooks"]);
+  });
+
+  it("refuses a skill that is not installed, and fails a job whose skill was removed", async () => {
+    const s = await setup();
+    const task: AiTask = {
+      type: "script",
+      input: { idea: "Mèo đi học", targetDurationSec: 30, skillId: "nope" },
+    };
+    await expect(s.estimate({ projectId: "prj_1", task })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+
+    await s.request({
+      projectId: "prj_1",
+      task: { type: "script", input: { idea: "Mèo đi học", targetDurationSec: 30, skillId: "viral-hooks" } },
+    });
+    s.skills.skills.clear();
+    const done = await s.run();
+    expect(done).toMatchObject({ status: "FAILED" });
+    expect(done?.errorMessage).toContain("viral-hooks");
+    expect(s.ai.calls).toEqual([]);
+  });
+
+  it("writes in the project language whatever the browser sent", async () => {
+    const s = await setup();
+    await s.repo.update("prj_1", (project) => ({ ...project, language: "en" }));
+    s.ai.script = { title: "Cats", script: "Did you know that cats sleep for most of the day?" };
+    await s.request({
+      projectId: "prj_1",
+      task: { type: "script", input: { idea: "Cats at school", targetDurationSec: 30, language: "vi" } },
+    });
+    expect(await s.run()).toMatchObject({ status: "COMPLETED" });
+    expect(s.ai.calls[0]).toMatchObject({ type: "script", input: { language: "en" } });
+  });
+
+  it("drops a rewrite that is not Vietnamese", async () => {
+    const s = await setup();
+    await s.request({
+      projectId: "prj_1",
+      task: {
+        type: "rewrite_scene",
+        input: { script: "", narration: "Cats sleep a lot, most of the day long." },
+      },
+    });
+    const done = await s.run();
+    expect(done).toMatchObject({ status: "FAILED" });
+    expect(done?.errorMessage).toContain("không phải tiếng Việt");
+  });
+
+  it("asks the brief questions and writes the outline in the project language (ADR 0015)", async () => {
+    const s = await setup();
+    s.ai.questions = {
+      questions: [
+        { id: "x", text: "Video cho ai?", kind: "single", options: ["Người nuôi mèo", "Trẻ em"] },
+        { id: "y", text: "Một lựa chọn", kind: "multi", options: ["Chỉ một"] },
+      ],
+    };
+    const brief = { idea: "Mèo đi học", targetDurationSec: 30 };
+    await s.request({ projectId: "prj_1", task: { type: "brief_questions", input: brief } });
+    const asked = await s.run();
+    expect(asked?.status).toBe("COMPLETED");
+    expect(await s.getResult({ projectId: "prj_1", jobId: asked?.id ?? "" })).toMatchObject({
+      type: "brief_questions",
+      suggestion: {
+        questions: [
+          { id: "q1", kind: "single" },
+          { id: "q2", kind: "text", options: [] },
+        ],
+      },
+    });
+
+    const answers = [{ question: "Video cho ai?", answer: "Trẻ em" }];
+    await s.request({ projectId: "prj_1", task: { type: "script_outline", input: { ...brief, answers } } });
+    const written = await s.run();
+    expect(written?.status).toBe("COMPLETED");
+    expect(s.ai.calls[1]).toMatchObject({ type: "script_outline", input: { answers, language: "vi" } });
+    expect(await s.getResult({ projectId: "prj_1", jobId: written?.id ?? "" })).toMatchObject({
+      type: "script_outline",
+      suggestion: { title: "Mèo", scenes: [{ narration: "Câu một." }, { narration: "Câu hai." }] },
+    });
+  });
+
+  it("refuses the brief questions when the AI does not write the script", async () => {
+    const s = await setup({ settings: { ...MODE_PRESETS.assisted, scriptGeneration: false } });
+    await expect(
+      s.request({
+        projectId: "prj_1",
+        task: { type: "brief_questions", input: { idea: "Mèo", targetDurationSec: 30 } },
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_OPERATION" });
   });
 });

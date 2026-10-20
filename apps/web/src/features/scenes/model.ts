@@ -11,6 +11,8 @@ import {
   moveScene,
   removeSceneSfx,
   scriptToScenes,
+  setAiSkill,
+  setProjectLanguage,
   setMediaRankingMode,
   setMusic,
   setProjectVoice,
@@ -21,9 +23,11 @@ import {
   updateSceneMedia,
   updateSceneSfx,
   updateStyle,
+  type ContentLanguage,
   type DomainContext,
   type MediaAsset,
   type MediaRankingMode,
+  type SkillId,
   type Music,
   type Project,
   type ScenePlanSuggestion,
@@ -93,6 +97,8 @@ export type EditorAction =
   | { type: "voicesGenerated"; server: Project; sceneIds: readonly string[] }
   | { type: "applySettings"; settings: ProjectSettingsPatch }
   | { type: "setMediaRankingMode"; mode: MediaRankingMode }
+  | { type: "setAiSkill"; skillId: SkillId | undefined }
+  | { type: "setLanguage"; language: ContentLanguage }
   | { type: "commitTyping" }
   | { type: "undo" }
   | { type: "dismissError" };
@@ -103,6 +109,8 @@ type ContentAction = Exclude<
     type:
       | "applySettings"
       | "setMediaRankingMode"
+      | "setAiSkill"
+      | "setLanguage"
       | "assetAdded"
       | "voicesGenerated"
       | "commitTyping"
@@ -295,6 +303,11 @@ export function editorReducer(
     // A preference, like the settings: saved, but not an undo step.
     case "setMediaRankingMode":
       return { ...state, project: setMediaRankingMode(state.project, action.mode) };
+    case "setAiSkill":
+      return { ...state, project: setAiSkill(state.project, action.skillId) };
+    // Also a preference: switching back restores the voices' status, nothing is lost.
+    case "setLanguage":
+      return { ...state, project: setProjectLanguage(state.project, action.language) };
     case "assetAdded":
       if (state.project.assets.some((asset) => asset.id === action.asset.id)) return state;
       return { ...state, project: { ...state.project, assets: [...state.project.assets, action.asset] } };

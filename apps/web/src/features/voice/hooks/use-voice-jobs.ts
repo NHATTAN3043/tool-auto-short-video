@@ -39,6 +39,8 @@ export function useVoiceJobs(
   const [pending, setPending] = useState<PendingVoiceRun | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Scenes whose own button led to `error`, so their card shows it; null when it concerns the panel. */
+  const [errorScenes, setErrorScenes] = useState<readonly string[] | null>(null);
   const onFinishedRef = useRef(onFinished);
 
   useEffect(() => {
@@ -85,6 +87,7 @@ export function useVoiceJobs(
           if (next.status === "FAILED") {
             const fallback =
               next.voice?.normalizeOnly === true ? "Cân bằng âm lượng thất bại." : "Tạo giọng thất bại.";
+            setErrorScenes(next.voice?.normalizeOnly === true ? null : (next.sceneIds ?? null));
             setError(next.errorMessage ?? fallback);
           }
         } catch (cause) {
@@ -98,13 +101,21 @@ export function useVoiceJobs(
     };
   }, [projectId, job, running]);
 
-  /** Saves pending edits, then asks the server what the run would cost and opens the confirmation. */
+  /**
+   * Saves pending edits, then asks the server what the run would cost and opens the confirmation.
+   * `before` runs first, e.g. to give the project its default voice; its failure is shown like the others.
+   */
   const prepare = useCallback(
-    async (sceneIds?: readonly string[], options: { regenerate?: boolean } = {}) => {
+    async (
+      sceneIds?: readonly string[],
+      options: { regenerate?: boolean; before?: () => Promise<void> } = {},
+    ) => {
       const regenerate = options.regenerate === true;
       setBusy(true);
       setError(null);
+      setErrorScenes(sceneIds ?? null);
       try {
+        await options.before?.();
         // The estimate and the job read the stored project, so the latest edits must be saved first.
         await flushSave();
         const estimate = await estimateVoices(projectId, sceneIds, regenerate);
@@ -126,6 +137,7 @@ export function useVoiceJobs(
     if (!pending) return;
     setBusy(true);
     setError(null);
+    setErrorScenes(pending.sceneIds ?? null);
     try {
       await flushSave();
       setJob(await requestVoices(projectId, pending.estimate.sceneIds, pending.regenerate));
@@ -145,6 +157,7 @@ export function useVoiceJobs(
   const balanceLoudness = useCallback(async () => {
     setBusy(true);
     setError(null);
+    setErrorScenes(null);
     try {
       await flushSave();
       setJob(await requestVoiceLoudness(projectId));
@@ -155,7 +168,7 @@ export function useVoiceJobs(
     }
   }, [projectId, flushSave]);
 
-  return { job, running, pending, busy, error, prepare, confirm, cancel, balanceLoudness };
+  return { job, running, pending, busy, error, errorScenes, prepare, confirm, cancel, balanceLoudness };
 }
 
 export type VoiceJobsState = ReturnType<typeof useVoiceJobs>;

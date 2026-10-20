@@ -6,18 +6,22 @@ import {
   DEFAULT_MAX_WORDS_PER_SCENE,
   DEFAULT_VOICE_TUNING,
   fullAiSteps,
+  projectLanguage,
   type BudgetCheck,
   type FullAiRequest,
   type FullAiStep,
   type MediaRankRequest,
   type Project,
+  type SkillGuidance,
   type VoiceSettings,
 } from "@studio/domain";
 
 import type { AiPort } from "../ports/ai";
 import type { CostGuardPort } from "../ports/cost-guard";
 import type { ProjectRepository } from "../ports/project-repository";
+import type { SkillCatalogPort } from "../ports/skill-catalog";
 import type { TtsPort } from "../ports/tts";
+import { resolveSkill } from "../skill/skills";
 
 export interface FullAiDeps {
   repo: ProjectRepository;
@@ -27,6 +31,8 @@ export interface FullAiDeps {
   /** From the environment; the estimate only needs the model. */
   voiceDefaults: { modelId?: string; voiceId?: string } | null;
   costGuard: CostGuardPort;
+  /** Installed skills; without it a request naming a skill is refused. */
+  skills?: SkillCatalogPort;
 }
 
 export interface FullAiInput {
@@ -63,12 +69,21 @@ function sampleText(words: number): string {
 
 /** The narration the later steps will work on: the project's script, or one of the target length. */
 function plannedNarration(project: Project, request: FullAiRequest, steps: readonly FullAiStep[]) {
+  const { outline } = request;
+  if (outline) {
+    // The approved outline is the real input: its scenes, and only the ones without a plan get one.
+    const script = outline.scenes.map((scene) => scene.narration).join("\n\n");
+    const sceneCount = outline.scenes.length;
+    const words = Math.max(1, Math.ceil(countWords(script) / sceneCount));
+    const unplanned = outline.scenes.filter((scene) => scene.visualPlan === undefined).length;
+    return { script, sceneCount, sceneText: sampleText(words), visualScenes: unplanned };
+  }
   const script = steps.includes("script")
     ? sampleText(Math.round(request.targetDurationSec * WORDS_PER_SECOND))
     : project.script;
   const sceneCount = Math.max(1, Math.ceil(countWords(script) / DEFAULT_MAX_WORDS_PER_SCENE));
   const words = Math.max(1, Math.ceil(countWords(script) / sceneCount));
-  return { script, sceneCount, sceneText: sampleText(words) };
+  return { script, sceneCount, sceneText: sampleText(words), visualScenes: sceneCount };
 }
 
 /**
@@ -77,8 +92,12 @@ function plannedNarration(project: Project, request: FullAiRequest, steps: reado
  * length because their input does not exist yet.
  */
 export function makeEstimateFullAi(deps: FullAiDeps) {
-  async function aiStep(step: FullAiStep, tasks: Parameters<AiPort["estimate"]>[0][]) {
-    const estimates = await Promise.all(tasks.map((task) => deps.ai.estimate(task)));
+  async function aiStep(
+    step: FullAiStep,
+    tasks: Parameters<AiPort["estimate"]>[0][],
+    guidance?: SkillGuidance,
+  ) {
+    const estimates = await Promise.all(tasks.map((task) => deps.ai.estimate(task, guidance)));
     return {
       estimate: {
         step,
@@ -102,9 +121,12 @@ export function makeEstimateFullAi(deps: FullAiDeps) {
 
   return async (input: FullAiInput): Promise<FullAiEstimate> => {
     const project = await deps.repo.get(input.projectId);
-    const steps = fullAiSteps(project.automationSettings, { tts: deps.tts !== null });
+    const steps = fullAiSteps(project.automationSettings, { tts: deps.tts !== null }, input.request.outline);
     assertFullAiRequest(project, input.request, steps);
     const { request } = input;
+    // The skill goes with the script and keyword steps, so it is counted there.
+    const language = request.language ?? projectLanguage(project);
+    const guidance = await resolveSkill(deps.skills ?? null, request.skillId, language);
     const planned = plannedNarration(project, request, steps);
     const sampleScenes = Array.from({ length: planned.sceneCount }, (_, i) => ({
       id: `scene-${String(i + 1)}`,
@@ -115,29 +137,57 @@ export function makeEstimateFullAi(deps: FullAiDeps) {
     for (const step of steps) {
       if (step === "script") {
         parts.push(
-          await aiStep(step, [
-            {
-              type: "script",
-              input: {
-                idea: request.idea ?? "",
-                targetDurationSec: request.targetDurationSec,
-                ...(request.tone !== undefined && { tone: request.tone }),
+          await aiStep(
+            step,
+            [
+              {
+                type: "script",
+                input: {
+                  idea: request.idea ?? "",
+                  targetDurationSec: request.targetDurationSec,
+                  ...(request.tone !== undefined && { tone: request.tone }),
+                  ...(request.skillId !== undefined && { skillId: request.skillId }),
+                  language,
+                },
               },
-            },
-          ]),
+            ],
+            guidance,
+          ),
         );
-      } else if (step === "scenes" && project.automationSettings.scenePlanning) {
+      } else if (step === "scenes" && !request.outline && project.automationSettings.scenePlanning) {
         parts.push(
-          await aiStep(step, [
-            {
-              type: "scenes",
-              input: { script: planned.script, maxWordsPerScene: DEFAULT_MAX_WORDS_PER_SCENE },
-            },
-          ]),
+          await aiStep(
+            step,
+            [
+              {
+                type: "scenes",
+                input: {
+                  script: planned.script,
+                  maxWordsPerScene: DEFAULT_MAX_WORDS_PER_SCENE,
+                  ...(request.skillId !== undefined && { skillId: request.skillId }),
+                  language,
+                },
+              },
+            ],
+            guidance,
+          ),
         );
       } else if (step === "visual") {
         parts.push(
-          await aiStep(step, [{ type: "visual", input: { script: planned.script, scenes: sampleScenes } }]),
+          await aiStep(
+            step,
+            [
+              {
+                type: "visual",
+                input: {
+                  script: planned.script,
+                  scenes: sampleScenes.slice(0, Math.max(1, planned.visualScenes)),
+                  ...(request.skillId !== undefined && { skillId: request.skillId }),
+                },
+              },
+            ],
+            guidance,
+          ),
         );
       } else if (step === "rank") {
         const tasks = [];

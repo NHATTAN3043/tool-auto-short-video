@@ -10,7 +10,7 @@ import type {
 import { useCallback, useState } from "react";
 
 import { importCandidate, searchMedia, type MediaSearchResult } from "../api";
-import { initialSearch, queryForLanguage } from "../model";
+import { initialSearch, queryForLanguage, type KeywordGroup } from "../model";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : "Đã có lỗi xảy ra.");
 
@@ -21,8 +21,10 @@ export function useMediaSearch(
   projectId: string,
   plan: VisualPlan | undefined,
   onPicked: (asset: MediaAsset) => void,
+  /** Keywords from the narration, used when the scene has no AI keywords. */
+  fallback: KeywordGroup | null = null,
 ) {
-  const initial = initialSearch(plan);
+  const initial = initialSearch(plan, fallback);
   const [query, setQuery] = useState(initial.query);
   const [lang, setLang] = useState<SearchLanguage>(initial.lang);
   const [kind, setKind] = useState<"video" | "image">(plan?.preferredMedia ?? "video");

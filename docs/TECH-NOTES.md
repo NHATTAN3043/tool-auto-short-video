@@ -124,13 +124,22 @@ Trong môi trường thử, video 14 giây mất khoảng 2 phút để render, 
 ## 5. TTS theo cảnh (M8, ADR 0006)
 
 - Adapter `tts-elevenlabs`: `POST /v1/text-to-speech/{voiceId}?output_format=mp3_44100_128`, header `xi-api-key`,
-  body `{ text, model_id, voice_settings: { stability, similarity_boost, speed } }`. Retry tối đa 2 lần, chỉ khi gặp 429/5xx,
-  có tôn trọng `Retry-After`.
+  body `{ text, model_id, language_code, voice_settings: { stability, similarity_boost, speed } }`. Retry tối đa 2 lần,
+  chỉ khi gặp 429/5xx, có tôn trọng `Retry-After`.
+- `language_code` là ngôn ngữ dự án (ADR 0013), chỉ gửi cho model nhận nó (Flash/Turbo v2.5, v3). Thiếu tham số này,
+  model đoán ngôn ngữ từ một câu ngắn và có lúc đọc tiếng Việt theo kiểu tiếng Anh.
 - Model tiếng Việt: `eleven_flash_v2_5` (0,5 credit/ký tự, mặc định) và `eleven_v3` (1 credit/ký tự). `eleven_multilingual_v2`
   **không** hỗ trợ tiếng Việt. Chi phí ước tính = ký tự × credit/ký tự × `ELEVENLABS_USD_PER_CREDIT`.
 - Văn bản gửi đi là lời đã chuẩn hoá khoảng trắng (`narrationForSpeech`). Hash cũng tính trên văn bản đã chuẩn hoá,
   nên sửa khoảng trắng không làm phải tạo lại giọng.
 - Worker đọc lại project trước mỗi cảnh. Cảnh đã bị xoá trong lúc đang tạo giọng thì file vừa ghi bị xoá theo.
+- Nghe thử (ADR 0014):
+  - **Mẫu gốc:** `GET /v1/voices/{id}` lấy `preview_url`, rồi server tải file mẫu về. Request tới host chứa file mẫu
+    không gửi kèm API key. Phần này miễn phí nên không đi qua CostGuard.
+  - **Đọc thử theo thiết lập:** gọi `synthesize` qua `GuardedTts` ngay trong request web, câu đọc tối đa 200 ký tự.
+    File lưu tại `projects/<id>/voice-previews/<voiceContentHash>.mp3`. Cùng câu, thiết lập và ngôn ngữ thì dùng lại
+    file đã lưu, không trả thêm phí.
+  - File preview không phải asset của dự án, nên không ảnh hưởng tới hash hay trạng thái giọng của cảnh.
 
 ## 6. AI gợi ý (M9, ADR 0007)
 

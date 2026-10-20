@@ -269,11 +269,12 @@ describe("generateSceneVoices", () => {
       id: tts.id,
       models: tts.models,
       listVoices: () => tts.listVoices(),
+      voiceSample: (voiceId) => tts.voiceSample(voiceId),
       estimate: (text) => tts.estimate(text),
-      synthesize: (text, settings) =>
+      synthesize: (text, settings, language) =>
         ++calls > 2
           ? Promise.reject(new DomainError("BUDGET_EXCEEDED", "Vượt ngân sách 24 giờ"))
-          : tts.synthesize(text, settings),
+          : tts.synthesize(text, settings, language),
     };
     const generate = makeGenerateSceneVoices({
       repo: s.repo,

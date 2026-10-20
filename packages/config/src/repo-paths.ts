@@ -24,6 +24,14 @@ export function loadRepoEnv(repoRoot: string = findRepoRoot()): Env {
   return loadEnv();
 }
 
+/** A relative STUDIO_SKILLS_DIR is relative to the repo root too. */
+export function resolveSkillsDir(
+  env: Pick<Env, "STUDIO_SKILLS_DIR">,
+  repoRoot: string = findRepoRoot(),
+): string {
+  return path.resolve(repoRoot, env.STUDIO_SKILLS_DIR);
+}
+
 /** A relative STUDIO_STORAGE_DIR is relative to the repo root, wherever the app was started from. */
 export function resolveStorageDir(
   env: Pick<Env, "STUDIO_STORAGE_DIR">,

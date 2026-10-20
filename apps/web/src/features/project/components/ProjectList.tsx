@@ -28,7 +28,8 @@ export function ProjectList({ projects }: { projects: ProjectSummary[] }) {
         <li key={project.id}>
           <Card className="relative transition-shadow hover:shadow-md">
             <CardHeader>
-              <div className="flex items-center justify-between gap-3">
+              {/* min-w-0: CardHeader is a grid, so without it the truncated title widens the row past the card. */}
+              <div className="flex min-w-0 items-center justify-between gap-3">
                 <CardTitle className="min-w-0 truncate">
                   {/* The link covers the whole card; the delete button sits above it. */}
                   <Link href={`/projects/${project.id}`} className="after:absolute after:inset-0">

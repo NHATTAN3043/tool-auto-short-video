@@ -2,6 +2,9 @@ import { z } from "zod";
 
 import { AI_RANK_MAX_CANDIDATES, AI_SCRIPT_MAX_SECONDS, AI_SCRIPT_MIN_SECONDS } from "../ai/schema";
 import { MediaCandidateSchema, MediaRankingModeSchema } from "../media/search";
+import { VisualPlanSchema } from "../scene/schema";
+import { SkillIdSchema } from "../skill/schema";
+import { ContentLanguageSchema } from "../text/language";
 
 // Full AI (M11b, ADR 0010): one worker job goes from an idea to scenes with media and voices, step by step
 // as the automation toggles allow, then the user reviews every scene.
@@ -10,12 +13,36 @@ import { MediaCandidateSchema, MediaRankingModeSchema } from "../media/search";
 export const FullAiStepSchema = z.enum(["script", "scenes", "visual", "media", "rank", "select", "voice"]);
 export type FullAiStep = z.infer<typeof FullAiStepSchema>;
 
+/**
+ * The script outline the user approved (ADR 0015): the run applies these scenes word for word instead of
+ * writing and splitting a script. A scene without a visual plan (added or edited) gets one from the AI.
+ */
+export const FullAiOutlineSchema = z.object({
+  title: z.string().trim().max(300),
+  scenes: z
+    .array(
+      z.object({
+        narration: z.string().trim().min(1).max(5000),
+        visualPlan: VisualPlanSchema.optional(),
+      }),
+    )
+    .min(1)
+    .max(100),
+});
+export type FullAiOutline = z.infer<typeof FullAiOutlineSchema>;
+
 export const FullAiRequestSchema = z.object({
   /** Needed when the script step runs; otherwise the project's own script is used. */
   idea: z.string().trim().max(2000).optional(),
   targetDurationSec: z.number().int().min(AI_SCRIPT_MIN_SECONDS).max(AI_SCRIPT_MAX_SECONDS),
   tone: z.string().trim().max(200).optional(),
   rankingMode: MediaRankingModeSchema,
+  /** Skill sent with the script and keyword steps (ADR 0012). */
+  skillId: SkillIdSchema.optional(),
+  /** Saved as the project language when the run starts (ADR 0013); absent keeps the project's. */
+  language: ContentLanguageSchema.optional(),
+  /** Approved outline; with it the idea is only context and no script is written. */
+  outline: FullAiOutlineSchema.optional(),
   /** The user confirmed that the current scenes are replaced. */
   replaceScenes: z.boolean(),
 });

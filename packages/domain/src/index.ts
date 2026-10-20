@@ -9,6 +9,8 @@ export * from "./voice/schema";
 export * from "./ai/schema";
 export * from "./cost/schema";
 export * from "./full-ai/schema";
+export * from "./full-ai/draft";
+export * from "./skill/schema";
 
 export {
   ACCEPTED_EXTENSIONS,
@@ -21,6 +23,7 @@ export { addAsset, findMissingAssetIds } from "./media/operations";
 export * from "./media/sfx-library";
 export * from "./media/media-library";
 export * from "./media/search";
+export { NARRATION_KEYWORDS_MAX, narrationKeywords } from "./media/narration-keywords";
 
 export {
   DEFAULT_CAPTION_STYLE,
@@ -35,7 +38,14 @@ export {
   type CreateProjectInput,
 } from "./project/create-project";
 export { migrateProject } from "./project/migrations";
-export { setMusic, setProjectVoice, updateStyle, type StylePatch } from "./project/operations";
+export {
+  projectLanguage,
+  setMusic,
+  setProjectLanguage,
+  setProjectVoice,
+  updateStyle,
+  type StylePatch,
+} from "./project/operations";
 export { RECOMMENDED_MAX_DURATION_MS, reviewProject, type ProjectWarning } from "./project/review";
 
 export {
@@ -67,6 +77,17 @@ export {
 
 export { countWords, estimateSpeechMs, speechWeight } from "./text/words";
 export {
+  CONTENT_LANGUAGE_LABELS,
+  ContentLanguageSchema,
+  DEFAULT_CONTENT_LANGUAGE,
+  LANGUAGE_CHECK_MIN_WORDS,
+  looksVietnamese,
+  matchesLanguage,
+  type ContentLanguage,
+  VIETNAMESE_MIN_MARKED_RATIO,
+  vietnameseRatio,
+} from "./text/language";
+export {
   computeTimeline,
   timelineDurationMs,
   type DurationSource,
@@ -89,25 +110,39 @@ export {
   setSceneVoice,
   setVoiceSettings,
   setVoiceTrack,
+  VOICE_PREVIEW_MAX_CHARACTERS,
 } from "./voice/operations";
 
-export { AI_TASK_TOGGLES, applyScenePlan, applyVisualPlans, assertAiTaskAllowed } from "./ai/apply";
+export {
+  AI_TASK_TOGGLES,
+  applyScenePlan,
+  applyVisualPlans,
+  assertAiTaskAllowed,
+  withProjectLanguage,
+} from "./ai/apply";
 export { orderByRanking, toRankCandidate } from "./ai/rank";
 export {
+  normalizeBriefQuestions,
   normalizeMediaRanking,
   normalizeQueries,
   normalizeScenePlan,
   normalizeSceneRewrite,
+  normalizeScriptOutline,
   normalizeScriptSuggestion,
   normalizeVisualPlan,
   normalizeVisualPlans,
+  NOT_ENGLISH_MESSAGE,
+  NOT_VIETNAMESE_MESSAGE,
 } from "./ai/normalize";
 export * from "./cost/budget";
 export {
+  applyFullAiOutline,
   assertFullAiRequest,
   FULL_AI_STEP_LABELS,
   fullAiSteps,
   isPaidFullAiStep,
+  outlineScenesWithoutPlan,
+  setAiSkill,
   setMediaRankingMode,
 } from "./full-ai/plan";
 

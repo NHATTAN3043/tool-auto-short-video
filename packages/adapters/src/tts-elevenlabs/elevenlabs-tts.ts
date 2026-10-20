@@ -1,4 +1,4 @@
-import type { VoiceSettings } from "@studio/domain";
+import type { ContentLanguage, VoiceSettings } from "@studio/domain";
 import type {
   SpeechContext,
   SynthesizedSpeech,
@@ -12,7 +12,7 @@ import { z } from "zod";
 export const ELEVENLABS_PROVIDER_ID = "elevenlabs";
 
 /**
- * Models that speak Vietnamese, default first. Credit rates from elevenlabs.io/docs/models; check them
+ * Models that speak every studio language (Vietnamese and English), default first. Credit rates from elevenlabs.io/docs/models; check them
  * again when the price list changes.
  */
 export const ELEVENLABS_MODELS: readonly TtsModel[] = [
@@ -23,6 +23,11 @@ export const ELEVENLABS_MODELS: readonly TtsModel[] = [
 const OUTPUT_FORMAT = "mp3_44100_128";
 /** Request stitching (previous/next context) is not available for these models (ElevenLabs docs). */
 const MODELS_WITHOUT_CONTEXT = new Set(["eleven_v3"]);
+/**
+ * Models that take `language_code`; the docs rule out multilingual_v2, so it is only sent to these.
+ * Telling the language stops the model guessing from a short scene and reading Vietnamese as English.
+ */
+const MODELS_WITH_LANGUAGE_CODE = new Set(["eleven_flash_v2_5", "eleven_turbo_v2_5", "eleven_v3"]);
 const MAX_RETRIES = 2;
 
 export interface ElevenLabsTtsOptions {
@@ -47,6 +52,9 @@ const VoicesResponseSchema = z.object({
     }),
   ),
 });
+
+/** One voice from `GET /v1/voices/{id}`; only its recorded sample is read. */
+const VoiceResponseSchema = z.object({ preview_url: z.string().nullish() });
 
 const ErrorBodySchema = z.object({
   detail: z.union([z.string(), z.object({ message: z.string() }).loose()]),
@@ -91,6 +99,20 @@ export class ElevenLabsTts implements TtsPort {
     }));
   }
 
+  /** The sample ElevenLabs recorded for the voice (free). The sample host gets no API key. */
+  async voiceSample(voiceId: string): Promise<SynthesizedSpeech | null> {
+    const response = await this.request(`/v1/voices/${encodeURIComponent(voiceId)}`, { method: "GET" });
+    const previewUrl = VoiceResponseSchema.parse(await response.json()).preview_url;
+    if (!previewUrl?.startsWith("https://")) return null;
+    const sample = await this.fetchFn(previewUrl, {
+      method: "GET",
+      signal: AbortSignal.timeout(this.options.timeoutMs ?? 60_000),
+    });
+    if (!sample.ok) throw new ElevenLabsError(sample.status, `ElevenLabs sample ${String(sample.status)}`);
+    const audio = new Uint8Array(await sample.arrayBuffer());
+    return audio.length === 0 ? null : { audio, extension: "mp3" };
+  }
+
   estimate(text: string, voice: VoiceSettings): TtsEstimate {
     const characters = text.length;
     const rate = this.models.find((model) => model.id === voice.modelId)?.creditsPerCharacter ?? 1;
@@ -98,7 +120,12 @@ export class ElevenLabsTts implements TtsPort {
     return { characters, credits, usd: credits * this.options.usdPerCredit };
   }
 
-  async synthesize(text: string, voice: VoiceSettings, context?: SpeechContext): Promise<SynthesizedSpeech> {
+  async synthesize(
+    text: string,
+    voice: VoiceSettings,
+    language: ContentLanguage,
+    context?: SpeechContext,
+  ): Promise<SynthesizedSpeech> {
     // The narration around this scene keeps pace and tone even across scenes generated one by one.
     const withContext = context !== undefined && !MODELS_WITHOUT_CONTEXT.has(voice.modelId);
     const response = await this.request(
@@ -109,6 +136,7 @@ export class ElevenLabsTts implements TtsPort {
         body: JSON.stringify({
           text,
           model_id: voice.modelId,
+          ...(MODELS_WITH_LANGUAGE_CODE.has(voice.modelId) && { language_code: language }),
           voice_settings: {
             stability: voice.stability,
             similarity_boost: voice.similarityBoost,

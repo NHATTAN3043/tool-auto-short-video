@@ -1,6 +1,6 @@
 "use client";
 
-import { hasVoiceConflict, type MediaAsset, type Project } from "@studio/domain";
+import { hasVoiceConflict, projectLanguage, type MediaAsset, type Project } from "@studio/domain";
 import {
   ArrowLeftIcon,
   AudioLinesIcon,
@@ -27,6 +27,7 @@ import { RenderPanel } from "@/features/render";
 import { copySfxToProject, SfxLibraryPanel, useSfxLibrary } from "@/features/sfx";
 import {
   SceneVoiceControls,
+  voiceStarter,
   useVoiceCatalog,
   useVoiceJobs,
   VoiceConfirmDialog,
@@ -90,6 +91,7 @@ export function ProjectWorkspace({
   const aiEnabled = aiAvailable && (scriptGeneration || scenePlanning || visualKeywords);
   const rankingEnabled = aiAvailable && editor.project.automationSettings.mediaRanking;
   const voiceJobs = useVoiceJobs(editor.project.id, voiceEnabled, editor.flushSave, editor.voicesGenerated);
+  const startVoice = voiceStarter(voiceCatalog.catalog, editor.saveVoiceSettings);
   const preview = usePreview(editor.project);
   const sfxLibrary = useSfxLibrary();
   const projectId = editor.project.id;
@@ -246,6 +248,17 @@ export function ProjectWorkspace({
                     projectId={editor.project.id}
                     sceneLabel={sceneLabel}
                     visualPlan={scene.visualPlan}
+                    narration={scene.narration}
+                    language={projectLanguage(editor.project)}
+                    keywordSuggest={
+                      aiAvailable
+                        ? {
+                            sceneId: scene.id,
+                            script: editor.project.script,
+                            onApply: editor.applyVisualPlans,
+                          }
+                        : null
+                    }
                     onPicked={(asset) => {
                       pickMedia(scene.id, asset);
                     }}
@@ -268,6 +281,7 @@ export function ProjectWorkspace({
                     scene={scene}
                     jobs={voiceJobs}
                     generationEnabled={voiceEnabled}
+                    startVoice={startVoice}
                     picker={{
                       onChange: (voiceAssetId) => {
                         editor.setSceneVoice(scene.id, voiceAssetId);
@@ -334,6 +348,7 @@ export function ProjectWorkspace({
                   catalog={voiceCatalog}
                   jobs={voiceJobs}
                   onSettingsChange={editor.setVoiceSettings}
+                  onLanguageChange={editor.setLanguage}
                   onCommit={editor.commitTyping}
                 />
               ) : null}
@@ -352,8 +367,7 @@ export function ProjectWorkspace({
                 <FullAiPanel
                   project={editor.project}
                   ttsAvailable={ttsAvailable}
-                  controller={fullAi}
-                  onRankingModeChange={editor.setMediaRankingMode}
+                  beforeOpen={editor.flushSave}
                 />
                 {aiEnabled ? (
                   <AiAssistantPanel

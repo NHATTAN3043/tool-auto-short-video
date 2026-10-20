@@ -123,15 +123,33 @@ describe("apply AI suggestions", () => {
 
   it("allows each task only when its automation toggle is on", () => {
     const manual = project({ automationSettings: { ...MODE_PRESETS.manual } });
+    const script = { type: "script" as const, input: { idea: "Mèo", targetDurationSec: 30 } };
     expect(() => {
-      assertAiTaskAllowed(manual, "script");
+      assertAiTaskAllowed(manual, script);
     }).toThrow(/scriptGeneration/u);
     const assisted = project({ automationSettings: { ...MODE_PRESETS.assisted } });
     expect(() => {
-      assertAiTaskAllowed(assisted, "scenes");
+      assertAiTaskAllowed(assisted, { type: "scenes", input: { script: "Một.", maxWordsPerScene: 20 } });
     }).not.toThrow();
     expect(() => {
-      assertAiTaskAllowed(assisted, "script");
+      assertAiTaskAllowed(assisted, script);
+    }).toThrow(DomainError);
+  });
+
+  it("allows keywords asked from one scene in every mode, never a bulk run past the toggle", () => {
+    const manual = project({ automationSettings: { ...MODE_PRESETS.manual, visualKeywords: false } });
+    const scenes = [{ id: "a", narration: "Một." }];
+    expect(() => {
+      assertAiTaskAllowed(manual, { type: "visual", input: { script: "", scenes, onDemand: true } });
+    }).not.toThrow();
+    expect(() => {
+      assertAiTaskAllowed(manual, { type: "visual", input: { script: "", scenes } });
+    }).toThrow(/visualKeywords/u);
+    expect(() => {
+      assertAiTaskAllowed(manual, {
+        type: "visual",
+        input: { script: "", scenes: [...scenes, { id: "b", narration: "Hai." }], onDemand: true },
+      });
     }).toThrow(DomainError);
   });
 

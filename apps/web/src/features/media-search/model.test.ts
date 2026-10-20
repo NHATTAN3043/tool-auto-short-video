@@ -5,6 +5,7 @@ import {
   initialSearch,
   keywordGroups,
   linkUrl,
+  narrationKeywordGroup,
   orientationLabel,
   parseTags,
   queryForLanguage,
@@ -36,6 +37,11 @@ describe("media search model", () => {
     expect(initialSearch(plan)).toEqual({ query: "cat playing", lang: "en" });
     expect(initialSearch({ ...plan, searchQueries: [] })).toEqual({ query: "mèo con", lang: "vi" });
     expect(initialSearch(undefined)).toEqual({ query: "", lang: "en" });
+    const fromNarration = narrationKeywordGroup("Mèo con chơi đùa trong vườn.", "vi");
+    expect(fromNarration).toMatchObject({ lang: "vi", label: "Từ lời đọc" });
+    expect(initialSearch(undefined, fromNarration)).toEqual({ query: "mèo con chơi", lang: "vi" });
+    expect(initialSearch(plan, fromNarration)).toEqual({ query: "cat playing", lang: "en" });
+    expect(narrationKeywordGroup("   ", "vi")).toBeNull();
   });
 
   it("switches the query to the scene's keyword in the chosen language, if it has one", () => {

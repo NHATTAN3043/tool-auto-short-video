@@ -1,4 +1,5 @@
-export type IdPrefix = "prj" | "scn" | "ast" | "job" | "sfx" | "lib" | "use";
+/** `ols` = a scene of a Full AI outline draft (ADR 0015), before it becomes a real scene. */
+export type IdPrefix = "prj" | "scn" | "ast" | "job" | "sfx" | "lib" | "use" | "ols";
 
 export type IdGenerator = (prefix: IdPrefix) => string;
 

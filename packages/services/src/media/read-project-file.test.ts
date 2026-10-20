@@ -12,6 +12,7 @@ async function setup() {
   await storage.write("projects/prj_1/thumbnails/empty.jpg", oneChunk(new Uint8Array()));
   await storage.write("projects/prj_1/project.json", oneChunk(new TextEncoder().encode("{}")));
   await storage.write("projects/prj_1/render/out.mp4", oneChunk(new Uint8Array([1])));
+  await storage.write("projects/prj_1/voice-previews/abc.mp3", oneChunk(new Uint8Array([1, 2])));
   await storage.write("secret.txt", oneChunk(new TextEncoder().encode("secret")));
   return makeReadProjectFile({ repo, storage });
 }
@@ -51,6 +52,16 @@ describe("readProjectFile", () => {
     expect(await read({ projectId: "prj_1", path: ["render", "out.mp4"] })).toMatchObject({
       status: 200,
       immutable: false,
+    });
+  });
+
+  it("serves voice previews as audio", async () => {
+    const read = await setup();
+    expect(await read({ projectId: "prj_1", path: ["voice-previews", "abc.mp3"] })).toMatchObject({
+      status: 200,
+      contentType: "audio/mpeg",
+      immutable: true,
+      size: 2,
     });
   });
 

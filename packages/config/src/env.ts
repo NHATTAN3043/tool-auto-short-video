@@ -27,6 +27,8 @@ export const EnvSchema = z.object({
   STUDIO_FFMPEG_PATH: stringWithDefault("ffmpeg"),
   STUDIO_FFPROBE_PATH: stringWithDefault("ffprobe"),
   STUDIO_BROWSER_EXECUTABLE: optionalString,
+  /** Skills offered to Full AI and rewrites (ADR 0012), one folder each with a SKILL.md. */
+  STUDIO_SKILLS_DIR: stringWithDefault("./.claude/skills"),
   /** Largest accepted upload, in megabytes. */
   STUDIO_MAX_UPLOAD_MB: z.preprocess(
     (value) => (value === "" ? undefined : value),

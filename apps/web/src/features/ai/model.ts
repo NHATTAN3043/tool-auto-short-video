@@ -16,6 +16,8 @@ export const AI_TASK_LABELS: Record<AiTaskType, string> = {
   visual: "Gợi ý hình ảnh",
   rank_media: "Xếp hạng media",
   rewrite_scene: "Viết lại cảnh",
+  brief_questions: "Hỏi lại ý tưởng",
+  script_outline: "Viết khung kịch bản",
 };
 
 export { formatUsd };

@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "skills": {
+    "viral-captions-and-ctas": {
+      "source": "vyralcontent/content-skills",
+      "sourceType": "github",
+      "skillPath": "skills/viral-captions-and-ctas/SKILL.md",
+      "computedHash": "99062338e7c59fdbf34e80237ac7297bea8af4ea01597799c0597f9c38c0fa0c"
+    },
+    "viral-hooks": {
+      "source": "vyralcontent/content-skills",
+      "sourceType": "github",
+      "skillPath": "skills/viral-hooks/SKILL.md",
+      "computedHash": "bf062748873cb86547243857f1214e5b4713fe687b8d3ac350d972fb753872cc"
+    },
+    "viral-instagram-reels": {
+      "source": "vyralcontent/content-skills",
+      "sourceType": "github",
+      "skillPath": "skills/viral-instagram-reels/SKILL.md",
+      "computedHash": "32660d8cb3bcbb2c5d984317ec6e0f524b94b9c7348955956f89f510cb483c90"
+    },
+    "viral-short-form": {
+      "source": "vyralcontent/content-skills",
+      "sourceType": "github",
+      "skillPath": "skills/viral-short-form/SKILL.md",
+      "computedHash": "a77fbd899195d89e086591c2642572c4cc875fe108992bcf49de451c1facdb20"
+    },
+    "viral-short-form-ideas": {
+      "source": "vyralcontent/content-skills",
+      "sourceType": "github",
+      "skillPath": "skills/viral-short-form-ideas/SKILL.md",
+      "computedHash": "25df48bd160902a5cc8aafa4aa519ad27ed18f3121625e18ccae6d1c64910320"
+    },
+    "viral-tiktok-content": {
+      "source": "vyralcontent/content-skills",
+      "sourceType": "github",
+      "skillPath": "skills/viral-tiktok-content/SKILL.md",
+      "computedHash": "fd7452d4c6e0800f8547d67ad24e69efe2828626a4735baba2b5266c51d92c05"
+    },
+    "viral-youtube-shorts": {
+      "source": "vyralcontent/content-skills",
+      "sourceType": "github",
+      "skillPath": "skills/viral-youtube-shorts/SKILL.md",
+      "computedHash": "b3a249e64c247c22733a767dd7c0cc54281c8c9c946d5937fc0fbf78ab4d1e45"
+    }
+  }
+}

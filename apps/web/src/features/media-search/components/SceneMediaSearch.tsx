@@ -5,14 +5,16 @@ import {
   orderByRanking,
   SearchLanguageSchema,
   toRankCandidate,
+  type ContentLanguage,
   type MediaAsset,
   type MediaCandidate,
   type MediaRankingMode,
   type SearchLanguage,
   type VisualPlan,
+  type VisualPlansSuggestion,
 } from "@studio/domain";
 import { CheckIcon, PlayIcon, SearchIcon, SparklesIcon, XIcon } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { AiConfirmDialog, useAiTask } from "@/features/ai";
 import { RankingModePicker } from "@/features/full-ai/components/RankingModePicker";
@@ -34,6 +36,7 @@ import {
   keywordGroups,
   LANGUAGE_LABELS,
   linkUrl,
+  narrationKeywordGroup,
   orientationLabel,
   SOURCE_LABELS,
 } from "../model";
@@ -179,6 +182,80 @@ function AiRankingControls({
   );
 }
 
+/** AI keywords for this one scene, asked from its search panel in any mode (an on-demand visual task). */
+export interface KeywordSuggestOptions {
+  sceneId: string;
+  /** Whole script, for context. */
+  script: string;
+  /** Saves the scene's new visual plan (intent, keywords in three languages). */
+  onApply: (suggestion: VisualPlansSuggestion) => void;
+}
+
+function AiKeywordControls({
+  projectId,
+  narration,
+  hasKeywords,
+  options,
+  onKeywords,
+}: {
+  projectId: string;
+  narration: string;
+  hasKeywords: boolean;
+  options: KeywordSuggestOptions;
+  /** The first new keyword, to search with right away. */
+  onKeywords: (query: string, lang: SearchLanguage) => void;
+}) {
+  const controller = useAiTask(projectId);
+  const { state, reset } = controller;
+  const { onApply } = options;
+
+  // Applied as soon as it arrives: the user already confirmed the cost, and the keywords stay editable.
+  useEffect(() => {
+    if (state.step !== "review" || state.result.type !== "visual") return;
+    const suggestion = state.result.suggestion;
+    onApply(suggestion);
+    reset();
+    const first = suggestion.plans[0]?.visualPlan.searchQueries[0];
+    if (first) onKeywords(first, "en");
+  }, [state, onApply, reset, onKeywords]);
+
+  const busy = state.step === "estimating" || state.step === "running";
+  return (
+    <div className="flex flex-col gap-1">
+      <div>
+        <Button
+          size="xs"
+          variant="outline"
+          disabled={busy || narration.trim() === ""}
+          onClick={() => {
+            void controller.prepare({
+              type: "visual",
+              input: {
+                script: options.script.slice(0, 20_000),
+                scenes: [{ id: options.sceneId, narration: narration.slice(0, 5000) }],
+                onDemand: true,
+              },
+            });
+          }}
+        >
+          <SparklesIcon />
+          {state.step === "running"
+            ? "AI đang gợi ý…"
+            : hasKeywords
+              ? "Gợi ý lại từ khoá bằng AI"
+              : "Gợi ý từ khoá bằng AI"}
+        </Button>
+      </div>
+      {state.step === "error" ? (
+        <p className="text-xs text-destructive" role="alert">
+          {state.message}
+        </p>
+      ) : null}
+      <AiConfirmDialog controller={controller} />
+    </div>
+  );
+}
+
 /**
  * Media search of one scene: keywords from the scene's visual plan in three languages, shared library
  * first, then Pexels/Pixabay. Picking a candidate adds it to the project and assigns it to this scene only.
@@ -187,24 +264,43 @@ export function SceneMediaSearch({
   projectId,
   sceneLabel,
   visualPlan,
+  narration,
+  language,
   onPicked,
   ranking: rankingOptions = null,
+  keywordSuggest = null,
 }: {
   projectId: string;
   sceneLabel: string;
   visualPlan: VisualPlan | undefined;
+  /** The scene's narration: free keywords when it has no AI ones, and the text the AI reads. */
+  narration: string;
+  /** The project language, for the free keywords. */
+  language: ContentLanguage;
   onPicked: (asset: MediaAsset) => void;
+  /** Null hides the AI keyword button (no AI provider). */
+  keywordSuggest?: KeywordSuggestOptions | null;
   /** Null hides AI ranking (no AI provider or the mediaRanking toggle is off). */
   ranking?: MediaRankingOptions | null;
 }) {
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState<MediaCandidate | null>(null);
-  const search = useMediaSearch(projectId, visualPlan, (asset) => {
-    onPicked(asset);
-    setPreview(null);
-    setOpen(false);
-  });
+  const aiGroups = keywordGroups(visualPlan);
+  const fallback = aiGroups.length === 0 ? narrationKeywordGroup(narration, language) : null;
+  const search = useMediaSearch(
+    projectId,
+    visualPlan,
+    (asset) => {
+      onPicked(asset);
+      setPreview(null);
+      setOpen(false);
+    },
+    fallback,
+  );
   const queryId = useId();
+  const runKeyword = (query: string, lang: SearchLanguage) => {
+    void search.run({ query, lang });
+  };
   const ranking = useAiRanking(projectId, search, rankingOptions);
 
   if (!open) {
@@ -250,11 +346,26 @@ export function SceneMediaSearch({
       </div>
 
       <KeywordChips
-        groups={keywordGroups(visualPlan)}
+        groups={fallback ? [fallback] : aiGroups}
         onSearch={(query, lang) => {
           void search.run({ query, lang });
         }}
       />
+      {fallback ? (
+        <p className="text-xs text-muted-foreground">
+          Từ khoá tự tách từ lời đọc, không dùng AI.
+          {keywordSuggest ? " Muốn từ khoá tiếng Anh, Trung chính xác hơn thì nhờ AI gợi ý." : ""}
+        </p>
+      ) : null}
+      {keywordSuggest ? (
+        <AiKeywordControls
+          projectId={projectId}
+          narration={narration}
+          hasKeywords={aiGroups.length > 0}
+          options={keywordSuggest}
+          onKeywords={runKeyword}
+        />
+      ) : null}
 
       <form
         className="flex flex-wrap items-center gap-2"

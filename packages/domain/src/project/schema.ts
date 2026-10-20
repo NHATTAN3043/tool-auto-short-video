@@ -3,6 +3,8 @@ import { z } from "zod";
 import { MediaAssetSchema } from "../media/schema";
 import { MediaRankingModeSchema } from "../media/search";
 import { SceneSchema } from "../scene/schema";
+import { SkillIdSchema } from "../skill/schema";
+import { ContentLanguageSchema } from "../text/language";
 import { VoiceSettingsSchema, VoiceTrackSchema } from "../voice/schema";
 
 export const PROJECT_SCHEMA_VERSION = 1;
@@ -71,6 +73,10 @@ export const ProjectSchema = z.object({
   music: MusicSchema.optional(),
   /** Ranking mode chosen last for Full AI; optional so older files stay valid. */
   mediaRankingMode: MediaRankingModeSchema.optional(),
+  /** Skill chosen last for Full AI and rewrites (ADR 0012); optional so older files stay valid. */
+  aiSkillId: SkillIdSchema.optional(),
+  /** What the narration is written and read in (ADR 0013); absent = Vietnamese, so older files stay valid. */
+  language: ContentLanguageSchema.optional(),
   style: ProjectStyleSchema,
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),

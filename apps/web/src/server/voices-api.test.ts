@@ -6,12 +6,15 @@ import { scriptToScenes, setVoiceSettings, type Project, type RenderJob } from "
 import { FakeTts } from "@studio/services/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { GET as fileRoute } from "@/app/api/projects/[id]/files/[...path]/route";
 import { POST as estimateRoute } from "@/app/api/projects/[id]/voices/estimate/route";
+import { POST as previewRoute } from "@/app/api/projects/[id]/voices/preview/route";
 import { POST as voicesRoute } from "@/app/api/projects/[id]/voices/route";
 import { GET as getJob } from "@/app/api/projects/[id]/renders/[jobId]/route";
 import { GET as listRenders, POST as renderRoute } from "@/app/api/projects/[id]/renders/route";
 import { PUT } from "@/app/api/projects/[id]/route";
 import { POST as createRoute } from "@/app/api/projects/route";
+import { GET as sampleRoute } from "@/app/api/voices/[voiceId]/sample/route";
 import { GET as catalogRoute } from "@/app/api/voices/route";
 
 import { resetContainer } from "./container";
@@ -33,6 +36,8 @@ describe("voice API", () => {
     dir = mkdtempSync(path.join(tmpdir(), "studio-voices-"));
     vi.stubEnv("STUDIO_STORAGE_DIR", dir);
     vi.stubEnv("ELEVENLABS_DEFAULT_VOICE_ID", "v1");
+    // Pinned: a local .env may choose another default model.
+    vi.stubEnv("ELEVENLABS_DEFAULT_MODEL_ID", "eleven_flash_v2_5");
     tts = new FakeTts();
     resetContainer({ tts });
   });
@@ -121,6 +126,46 @@ describe("voice API", () => {
     expect((await renderRoute(post({ kind: "tts" }), ctx(p.id))).status).toBe(400);
   });
 
+  const sample = (voiceId: string) =>
+    sampleRoute(new Request("http://x"), { params: Promise.resolve({ voiceId }) });
+
+  it("serves a voice's free sample, 404 for a voice without one", async () => {
+    const res = await sample("v1");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("audio/mpeg");
+    expect(await res.text()).toBe("sample:v1");
+    expect((await sample("v9")).status).toBe(404);
+    expect(tts.calls).toEqual([]);
+  });
+
+  it("speaks a preview with the posted settings once, then serves it from the project files", async () => {
+    const p = await project(false);
+    const body = { text: "Xin chào", voice: { ...voice, speed: 1.1 }, language: "vi" };
+    const first = (await (await previewRoute(post(body), ctx(p.id))).json()) as {
+      path: string;
+      cached: boolean;
+    };
+    expect(first.cached).toBe(false);
+    expect(tts.calls).toEqual([{ text: "Xin chào", voice: body.voice, language: "vi" }]);
+
+    const again = (await (await previewRoute(post(body), ctx(p.id))).json()) as { cached: boolean };
+    expect(again.cached).toBe(true);
+    expect(tts.calls).toHaveLength(1);
+
+    const file = await fileRoute(new Request("http://x"), {
+      params: Promise.resolve({ id: p.id, path: first.path.split("/") }),
+    });
+    expect(file.status).toBe(200);
+    expect(file.headers.get("content-type")).toBe("audio/mpeg");
+  });
+
+  it("rejects an invalid preview body", async () => {
+    const p = await project();
+    expect((await previewRoute(post({ text: "Hi", voice, language: "fr" }), ctx(p.id))).status).toBe(400);
+    expect((await previewRoute(post({ text: "", voice, language: "vi" }), ctx(p.id))).status).toBe(400);
+    expect(tts.calls).toEqual([]);
+  });
+
   it("answers 404 TTS_UNAVAILABLE on every voice route without a provider", async () => {
     resetContainer({ tts: null });
     const p = await project();
@@ -128,6 +173,8 @@ describe("voice API", () => {
       await catalogRoute(),
       await estimateRoute(post(), ctx(p.id)),
       await voicesRoute(post(), ctx(p.id)),
+      await previewRoute(post({ text: "Hi", voice, language: "vi" }), ctx(p.id)),
+      await sample("v1"),
     ]) {
       expect(res.status).toBe(404);
       expect(await res.json()).toMatchObject({ error: { code: "TTS_UNAVAILABLE" } });

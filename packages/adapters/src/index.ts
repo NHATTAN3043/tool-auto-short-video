@@ -13,6 +13,7 @@ export { LocalStorage } from "./storage-local/local-storage";
 export { PexelsSearch, type PexelsSearchOptions } from "./media-pexels/pexels-search";
 export { PixabaySearch, type PixabaySearchOptions } from "./media-pixabay/pixabay-search";
 export { FetchRemoteFiles } from "./remote-http/fetch-remote-files";
+export { LocalSkillCatalog, parseSkillFile } from "./skills-local/local-skill-catalog";
 export { JsonMediaLibrary } from "./repository-json/json-media-library";
 export { JsonApiUsageLog, JsonBudgetSettings } from "./repository-json/json-cost-store";
 export { BudgetCostGuard, GuardedAi, GuardedTts, type BudgetCostGuardOptions } from "./cost-guard";

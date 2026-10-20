@@ -34,3 +34,12 @@ có giới hạn rõ ràng và được thấy trước khi chạy. CostGuard đ
   luôn an toàn. Khi Anthropic đổi giá thì phải sửa bảng này.
 - Nạp credit trả trước và tắt auto-reload trong Claude Console là lớp chặn ngoài cùng; `AI_MAX_USD_PER_DAY` là lớp trong app.
 - M11 sẽ thay giới hạn ngày này bằng CostGuard (ngân sách theo ngày, tháng và dự án, log `api_usage`) mà không đổi `AiPort`.
+
+## Bổ sung: gợi ý từ khoá cho một cảnh ở mọi chế độ
+
+- Panel tìm media của mỗi cảnh có nút "Gợi ý từ khoá bằng AI" khi có key Claude, ở mọi chế độ. Nút gửi task `visual`
+  cho đúng một cảnh với `onDemand: true`. Đây là thao tác người dùng bấm, không phải tự động hoá, nên
+  `assertAiTaskAllowed` không xét công tắc `visualKeywords`. Công tắc vẫn quyết định nút gợi ý hàng loạt và bước Full AI.
+  Task vẫn qua ước tính, xác nhận chi phí và CostGuard như mọi task khác.
+- Không có key, hoặc cảnh chưa có từ khoá AI: `narrationKeywords` tách cụm từ khoá từ lời đọc theo ngôn ngữ dự án.
+  Hàm thuần, miễn phí, không cần key (quy tắc 5).

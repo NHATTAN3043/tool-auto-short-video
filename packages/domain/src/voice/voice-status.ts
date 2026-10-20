@@ -1,3 +1,4 @@
+import { projectLanguage } from "../project/operations";
 import type { Project } from "../project/schema";
 import type { Scene } from "../scene/schema";
 import { narrationForSpeech, voiceContentHash } from "./content-hash";
@@ -19,7 +20,8 @@ export function sceneVoiceStatus(project: Project, scene: Scene): SceneVoiceStat
   if (!asset) return "missing";
   if (asset.source !== "tts") return "uploaded";
   if (project.voice === undefined) return "current";
-  return asset.contentHash === voiceContentHash(scene.narration, project.voice) ? "current" : "outdated";
+  const hash = voiceContentHash(scene.narration, project.voice, projectLanguage(project));
+  return asset.contentHash === hash ? "current" : "outdated";
 }
 
 /** Scenes a "generate changed voices" run would produce: missing or outdated, in scene order. */

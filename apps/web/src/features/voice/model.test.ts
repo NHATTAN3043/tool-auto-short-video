@@ -10,18 +10,24 @@ import { describe, expect, it } from "vitest";
 
 import type { VoiceCatalog } from "./api";
 import {
+  defaultPreviewText,
   estimateSummary,
   formatUsd,
   initialVoiceSettings,
+  isPreviewTextValid,
   isRunning,
   isVoiceJob,
   jobCoversScene,
+  previewCredits,
+  previewKey,
   sceneNumbers,
   sceneVoiceChoices,
   sceneVoiceOptionLabel,
   voiceAction,
+  voiceButtonBlock,
   voiceOptionLabel,
   voiceOverview,
+  voiceStarter,
 } from "./model";
 
 const catalog: VoiceCatalog = {
@@ -146,5 +152,74 @@ describe("scene voice picker", () => {
     const newer = audio("new", "tts", "2026-10-11T08:00:00.000Z");
     const image: MediaAsset = { ...older, id: "img", kind: "image" };
     expect(sceneVoiceChoices([older, image, newer]).map((asset) => asset.id)).toEqual(["new", "old"]);
+  });
+});
+
+describe("a project without voice settings", () => {
+  it("can still generate a scene voice once the catalog offers a default voice", () => {
+    expect(voiceButtonBlock(true, false)).toBeNull();
+    expect(voiceButtonBlock(false, true)).toBeNull();
+    expect(voiceButtonBlock(false, false)).toContain("Giọng đọc AI");
+  });
+
+  it("saves the default voice of the catalog, and has nothing to start without one", async () => {
+    const saved: VoiceSettings[] = [];
+    const save = (settings: VoiceSettings) => {
+      saved.push(settings);
+      return Promise.resolve();
+    };
+    expect(voiceStarter(null, save)).toBeNull();
+    expect(voiceStarter({ ...catalog, voices: [] }, save)).toBeNull();
+    await voiceStarter(catalog, save)?.();
+    expect(saved).toEqual([initialVoiceSettings(catalog)]);
+  });
+});
+
+describe("voice preview", () => {
+  const base = createProject({ name: "P", mode: "manual" }, { newId: () => "prj_1" });
+  const settings: VoiceSettings = {
+    provider: "elevenlabs",
+    voiceId: "a",
+    modelId: "eleven_flash_v2_5",
+    stability: 1,
+    similarityBoost: 0.75,
+    speed: 1,
+  };
+
+  it("starts from the first scene with words, cut at a word boundary near 150 characters", () => {
+    const long = `${"chữ ".repeat(60)}cuối`;
+    const project: Project = {
+      ...base,
+      scenes: [
+        { id: "s1", narration: "   ", status: "draft" },
+        { id: "s2", narration: long, status: "draft" },
+      ],
+    };
+    const text = defaultPreviewText(project);
+    expect(text.length).toBeLessThanOrEqual(150);
+    expect(text.endsWith("chữ")).toBe(true);
+    expect(
+      defaultPreviewText({ ...project, scenes: [{ id: "s", narration: " Ngắn  thôi ", status: "draft" }] }),
+    ).toBe("Ngắn thôi");
+  });
+
+  it("falls back to a sample sentence in the project language", () => {
+    expect(defaultPreviewText(base)).toMatch(/^Xin chào/u);
+    expect(defaultPreviewText({ ...base, language: "en" })).toMatch(/^Hello/u);
+  });
+
+  it("counts credits like the provider and accepts 1 to 200 spoken characters", () => {
+    expect(previewCredits("Xin  chào", "eleven_flash_v2_5", catalog)).toBe(4);
+    expect(previewCredits("abcd", "unknown", catalog)).toBe(4);
+    expect(isPreviewTextValid("  ")).toBe(false);
+    expect(isPreviewTextValid("a".repeat(200))).toBe(true);
+    expect(isPreviewTextValid("a".repeat(201))).toBe(false);
+  });
+
+  it("keys a preview by its spoken text, settings and language", () => {
+    const key = previewKey("Xin chào", settings, "vi");
+    expect(previewKey(" Xin   chào ", settings, "vi")).toBe(key);
+    expect(previewKey("Xin chào", { ...settings, speed: 1.1 }, "vi")).not.toBe(key);
+    expect(previewKey("Xin chào", settings, "en")).not.toBe(key);
   });
 });

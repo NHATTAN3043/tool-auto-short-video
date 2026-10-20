@@ -41,6 +41,9 @@ export function setVoiceTrack(project: Project, track: VoiceTrack): Project {
 /** Tuning a new voice starts from: ElevenLabs' own defaults, except stability at its maximum. */
 export const DEFAULT_VOICE_TUNING = { stability: 1, similarityBoost: 0.75, speed: 1 } as const;
 
+/** A voice preview is one short sentence: long enough to judge the voice, cheap enough to try often. */
+export const VOICE_PREVIEW_MAX_CHARACTERS = 200;
+
 /**
  * Settings a project starts from: the configured default voice and model, else the first ones of the
  * provider account. Null when the account has no voice.

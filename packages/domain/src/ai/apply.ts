@@ -1,9 +1,10 @@
 import { DomainError } from "../errors";
 import { newId, type DomainContext } from "../ids";
+import { projectLanguage } from "../project/operations";
 import type { AutomationSettings, Project } from "../project/schema";
 import type { Scene } from "../scene/schema";
 import { normalizeScenePlan, normalizeVisualPlan } from "./normalize";
-import type { AiTaskType, ScenePlanSuggestion, VisualPlansSuggestion } from "./schema";
+import type { AiTask, AiTaskType, ScenePlanSuggestion, VisualPlansSuggestion } from "./schema";
 
 /** The automation toggle that allows each AI task; code checks the toggle, never the mode. */
 export const AI_TASK_TOGGLES: Readonly<Record<AiTaskType, keyof AutomationSettings>> = {
@@ -13,12 +14,44 @@ export const AI_TASK_TOGGLES: Readonly<Record<AiTaskType, keyof AutomationSettin
   rank_media: "mediaRanking",
   // Rewriting a scene is writing narration, like writing the script.
   rewrite_scene: "scriptGeneration",
+  // The questions and the outline are the first half of writing the script (ADR 0015).
+  brief_questions: "scriptGeneration",
+  script_outline: "scriptGeneration",
 };
 
-export function assertAiTaskAllowed(project: Project, type: AiTaskType): void {
-  const toggle = AI_TASK_TOGGLES[type];
+export function assertAiTaskAllowed(project: Project, task: AiTask): void {
+  if (task.type === "visual" && task.input.onDemand === true) {
+    if (task.input.scenes.length !== 1) {
+      throw new DomainError("INVALID_INPUT", "An on-demand keyword suggestion is for one scene");
+    }
+    return;
+  }
+  const toggle = AI_TASK_TOGGLES[task.type];
   if (!project.automationSettings[toggle]) {
     throw new DomainError("INVALID_OPERATION", `Automation "${toggle}" is turned off for this project`);
+  }
+}
+
+/**
+ * The task with the project language set on the tasks that write or split narration (ADR 0013). The
+ * server fills it, so the browser cannot ask for a language the project does not speak.
+ */
+export function withProjectLanguage(task: AiTask, project: Project): AiTask {
+  const language = projectLanguage(project);
+  switch (task.type) {
+    case "script":
+      return { ...task, input: { ...task.input, language } };
+    case "scenes":
+      return { ...task, input: { ...task.input, language } };
+    case "rewrite_scene":
+      return { ...task, input: { ...task.input, language } };
+    case "brief_questions":
+      return { ...task, input: { ...task.input, language } };
+    case "script_outline":
+      return { ...task, input: { ...task.input, language } };
+    case "visual":
+    case "rank_media":
+      return task;
   }
 }
 

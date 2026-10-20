@@ -48,6 +48,14 @@ describe("voiceContentHash", () => {
       expect(voiceContentHash("Xin chào", { ...settings, ...patch })).not.toBe(hash);
     }
   });
+
+  it("keeps the hash of voices made before the project language for Vietnamese, changes it for English", () => {
+    const hash = voiceContentHash("Xin chào", settings, "vi");
+    // Computed by the version without a language: existing voices must stay current.
+    expect(hash).toBe("tts1:0000dc99e2d5836c");
+    expect(voiceContentHash("Xin chào", settings)).toBe(hash);
+    expect(voiceContentHash("Xin chào", settings, "en")).not.toBe(hash);
+  });
 });
 
 describe("sceneVoiceStatus / scenesNeedingVoice", () => {
@@ -78,6 +86,12 @@ describe("sceneVoiceStatus / scenesNeedingVoice", () => {
   it("marks every generated voice outdated when the voice settings change", () => {
     const changed = { ...p, voice: { ...settings, speed: 1.1 } };
     expect(sceneVoiceStatus(changed, p.scenes[0] ?? scene("x", ""))).toBe("outdated");
+  });
+
+  it("marks every generated voice outdated when the project language changes", () => {
+    const first = p.scenes[0] ?? scene("x", "");
+    expect(sceneVoiceStatus({ ...p, language: "vi" }, first)).toBe("current");
+    expect(sceneVoiceStatus({ ...p, language: "en" }, first)).toBe("outdated");
   });
 
   it("lists missing and outdated scenes in order, optionally within a selection", () => {

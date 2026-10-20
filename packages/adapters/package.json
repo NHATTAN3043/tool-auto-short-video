@@ -19,7 +19,8 @@
     "./media-pexels": "./src/media-pexels/pexels-search.ts",
     "./media-pixabay": "./src/media-pixabay/pixabay-search.ts",
     "./remote-http": "./src/remote-http/fetch-remote-files.ts",
-    "./cost-guard": "./src/cost-guard/index.ts"
+    "./cost-guard": "./src/cost-guard/index.ts",
+    "./skills-local": "./src/skills-local/local-skill-catalog.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",

@@ -17,6 +17,7 @@ import {
   JsonBudgetSettings,
   JsonMediaLibrary,
   JsonProjectRepository,
+  LocalSkillCatalog,
   LocalStorage,
   PgApiUsageLog,
   PgBudgetSettings,
@@ -28,7 +29,14 @@ import {
   RemotionRenderer,
   ZipArchive,
 } from "@studio/adapters";
-import { budgetDefaults, findRepoRoot, loadRepoEnv, resolveStorageDir, type Env } from "@studio/config";
+import {
+  budgetDefaults,
+  findRepoRoot,
+  loadRepoEnv,
+  resolveSkillsDir,
+  resolveStorageDir,
+  type Env,
+} from "@studio/config";
 import {
   makeExportCapcut,
   makeFailStaleJobs,
@@ -160,8 +168,10 @@ export function createContainer(env: Env = loadRepoEnv(REPO_ROOT), clock: Clock 
   if (env.PEXELS_API_KEY !== undefined) providers.push(new PexelsSearch({ apiKey: env.PEXELS_API_KEY }));
   if (env.PIXABAY_API_KEY !== undefined) providers.push(new PixabaySearch({ apiKey: env.PIXABAY_API_KEY }));
   const rankImages = makeResolveRankImages({ library: mediaLibrary, storage, providers });
+  // Read when a job runs, so a skill installed or edited after the worker started is used too.
+  const skills = new LocalSkillCatalog(resolveSkillsDir(env, REPO_ROOT));
   const guardedAi = ai ? (context: PaidCallContext) => new GuardedAi(ai, costGuard, context) : null;
-  const runAiTask = guardedAi ? makeRunAiTask({ ai: guardedAi, storage, rankImages }) : null;
+  const runAiTask = guardedAi ? makeRunAiTask({ ai: guardedAi, storage, rankImages, skills }) : null;
   const runFullAi = guardedAi
     ? makeRunFullAi({
         repo,
@@ -180,6 +190,7 @@ export function createContainer(env: Env = loadRepoEnv(REPO_ROOT), clock: Clock 
           maxBytes: env.STUDIO_MAX_UPLOAD_MB * 1024 * 1024,
         }),
         rankImages,
+        skills,
         voices:
           tts && generateSceneVoices
             ? {

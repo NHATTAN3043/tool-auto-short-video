@@ -380,6 +380,24 @@ rác): bản ghi dự án, các job của nó và thư mục `projects/<id>/`. C
 viện media/SFX chung và log `api_usage` (chi phí vẫn tính vào ngân sách ngày/tháng). **Không làm:** xoá nhiều dự án một
 lúc, khôi phục.
 
+### Bổ sung — Skill cho Full AI (ADR 0012)
+
+**Phạm vi:** dropdown chọn một skill (thư mục `STUDIO_SKILLS_DIR`, mặc định `.claude/skills`) ở form Full AI và ở
+nút Viết lại của màn duyệt; nội dung `SKILL.md` (hoặc `SKILL.vi.md`) gửi kèm các bước Viết script, Chia cảnh/Gợi ý
+hình ảnh và Viết lại; dự án nhớ skill đã chọn. Lời đọc không phải tiếng Việt bị bỏ, dự án không đổi. **Không làm:**
+chọn nhiều skill, gửi `references/`, dùng skill cho xếp hạng media hay trợ lý AI từng phần.
+
+### Bổ sung — Full AI hỏi lại và duyệt khung kịch bản (ADR 0015)
+
+**Phạm vi:** trang `/projects/[id]/full-ai` với 3 bước: ý tưởng → AI hỏi lại tối đa 5 câu (chọn một, chọn nhiều hoặc
+tự gõ; bỏ trống thì AI tự chọn) → khung kịch bản theo cảnh (lời đọc + ý đồ hình, ước số giây, cảnh báo cảnh dài).
+Ở khung kịch bản: sửa lời, thêm/xoá/đổi thứ tự cảnh, AI viết lại một cảnh, góp ý để AI làm lại cả khung. Duyệt xong
+mới chạy job Full AI, dùng đúng lời đã duyệt. Nháp lưu riêng, tải lại trang không mất. Có đường tắt "Chạy luôn, không
+hỏi" và "Bỏ qua câu hỏi". **Không làm:** hỏi nhiều vòng, lịch sử các lần làm lại, toggle riêng trong cài đặt.
+
+**Tiêu chí xong:** từ ý tưởng tới video mà không có lệnh gọi trả phí nào ngoài câu hỏi và khung kịch bản trước khi
+người dùng bấm duyệt; lời đọc trong dự án đúng từng chữ với khung đã duyệt.
+
 ---
 
 ## 4. Sau V1 (chỉ khi POC chứng minh giá trị)

@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import { MediaLinkSchema, MediaRankingModeSchema } from "../media/search";
 import { VisualPlanSchema } from "../scene/schema";
+import { SkillIdSchema } from "../skill/schema";
+import { ContentLanguageSchema } from "../text/language";
 
 // What the studio asks an AI provider and what it gets back. Results are suggestions: they are shown for
 // review and only change the project when the user applies them.
@@ -17,12 +19,20 @@ export const ScriptRequestSchema = z.object({
   targetDurationSec: z.number().int().min(AI_SCRIPT_MIN_SECONDS).max(AI_SCRIPT_MAX_SECONDS),
   /** Free text: "hài hước", "truyền cảm hứng"… */
   tone: z.string().trim().max(200).optional(),
+  /** Skill sent along as expert notes (ADR 0012). */
+  skillId: SkillIdSchema.optional(),
+  /** Language of the narration (ADR 0013); filled from the project by the server. Absent = Vietnamese. */
+  language: ContentLanguageSchema.optional(),
 });
 export type ScriptRequest = z.infer<typeof ScriptRequestSchema>;
 
 export const ScenePlanRequestSchema = z.object({
   script: z.string().trim().min(1).max(20_000),
   maxWordsPerScene: z.number().int().min(5).max(60),
+  /** Only shapes the visual suggestions: the narration is kept word for word. */
+  skillId: SkillIdSchema.optional(),
+  /** The script's language, so the split never translates it. */
+  language: ContentLanguageSchema.optional(),
 });
 export type ScenePlanRequest = z.infer<typeof ScenePlanRequestSchema>;
 
@@ -33,6 +43,12 @@ export const VisualPlanRequestSchema = z.object({
     .array(z.object({ id: z.string().min(1), narration: z.string().max(5000) }))
     .min(1)
     .max(100),
+  skillId: SkillIdSchema.optional(),
+  /**
+   * Asked from one scene's media search: a click of the user, not an automation, so it runs whatever the
+   * visualKeywords toggle says. Only for a single scene; the bulk and Full AI steps follow the toggle.
+   */
+  onDemand: z.boolean().optional(),
 });
 export type VisualPlanRequest = z.infer<typeof VisualPlanRequestSchema>;
 
@@ -76,8 +92,37 @@ export const SceneRewriteRequestSchema = z.object({
   narration: z.string().trim().min(1).max(5000),
   /** Free text: "ngắn hơn", "hài hước hơn"… */
   instruction: z.string().trim().max(300).optional(),
+  skillId: SkillIdSchema.optional(),
+  language: ContentLanguageSchema.optional(),
 });
 export type SceneRewriteRequest = z.infer<typeof SceneRewriteRequestSchema>;
+
+/** At most this many questions in one round, each with at most AI_BRIEF_MAX_OPTIONS options. */
+export const AI_BRIEF_MAX_QUESTIONS = 5;
+export const AI_BRIEF_MAX_OPTIONS = 5;
+
+/** Full AI asks before writing (ADR 0015): same inputs as the script, the answer is questions. */
+export const BriefQuestionsRequestSchema = ScriptRequestSchema;
+export type BriefQuestionsRequest = z.infer<typeof BriefQuestionsRequestSchema>;
+
+export const BriefAnswerSchema = z.object({
+  question: z.string().trim().min(1).max(300),
+  answer: z.string().trim().min(1).max(500),
+});
+export type BriefAnswer = z.infer<typeof BriefAnswerSchema>;
+
+export const ScriptOutlineRequestSchema = ScriptRequestSchema.extend({
+  /** Only the questions the user answered; the AI decides the rest. */
+  answers: z.array(BriefAnswerSchema).max(AI_BRIEF_MAX_QUESTIONS),
+  /** "Làm lại": the narration of the outline being replaced and what to change in it. */
+  revision: z
+    .object({
+      feedback: z.string().trim().min(1).max(500),
+      scenes: z.array(z.string().max(5000)).min(1).max(100),
+    })
+    .optional(),
+});
+export type ScriptOutlineRequest = z.infer<typeof ScriptOutlineRequestSchema>;
 
 export const AiTaskSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("script"), input: ScriptRequestSchema }),
@@ -85,6 +130,8 @@ export const AiTaskSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("visual"), input: VisualPlanRequestSchema }),
   z.object({ type: z.literal("rank_media"), input: MediaRankRequestSchema }),
   z.object({ type: z.literal("rewrite_scene"), input: SceneRewriteRequestSchema }),
+  z.object({ type: z.literal("brief_questions"), input: BriefQuestionsRequestSchema }),
+  z.object({ type: z.literal("script_outline"), input: ScriptOutlineRequestSchema }),
 ]);
 export type AiTask = z.infer<typeof AiTaskSchema>;
 export type AiTaskType = AiTask["type"];
@@ -110,6 +157,28 @@ export type MediaRankingSuggestion = z.infer<typeof MediaRankingSuggestionSchema
 export const SceneRewriteSuggestionSchema = z.object({ narration: z.string().min(1) });
 export type SceneRewriteSuggestion = z.infer<typeof SceneRewriteSuggestionSchema>;
 
+/** `text` questions have no options; the others offer 2+ and always allow a free answer. */
+export const BriefQuestionKindSchema = z.enum(["single", "multi", "text"]);
+export type BriefQuestionKind = z.infer<typeof BriefQuestionKindSchema>;
+
+export const BriefQuestionSchema = z.object({
+  id: z.string().min(1).max(40),
+  text: z.string().min(1).max(300),
+  kind: BriefQuestionKindSchema,
+  options: z.array(z.string().min(1).max(120)).max(AI_BRIEF_MAX_OPTIONS),
+});
+export type BriefQuestion = z.infer<typeof BriefQuestionSchema>;
+
+/** No questions is a valid answer: the idea was clear enough. */
+export const BriefQuestionsSuggestionSchema = z.object({
+  questions: z.array(BriefQuestionSchema).max(AI_BRIEF_MAX_QUESTIONS),
+});
+export type BriefQuestionsSuggestion = z.infer<typeof BriefQuestionsSuggestionSchema>;
+
+/** Narration and visual plan per scene, like a scene plan, plus the title. */
+export const ScriptOutlineSuggestionSchema = ScenePlanSuggestionSchema.extend({ title: z.string() });
+export type ScriptOutlineSuggestion = z.infer<typeof ScriptOutlineSuggestionSchema>;
+
 export const AiUsageSchema = z.object({
   inputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
@@ -130,6 +199,16 @@ export const AiResultSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("rewrite_scene"),
     suggestion: SceneRewriteSuggestionSchema,
+    usage: AiUsageSchema,
+  }),
+  z.object({
+    type: z.literal("brief_questions"),
+    suggestion: BriefQuestionsSuggestionSchema,
+    usage: AiUsageSchema,
+  }),
+  z.object({
+    type: z.literal("script_outline"),
+    suggestion: ScriptOutlineSuggestionSchema,
     usage: AiUsageSchema,
   }),
 ]);

@@ -22,6 +22,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
         latest={latest}
         ttsAvailable={container.listTtsVoices !== null}
         aiAvailable={container.requestAiTask !== null}
+        skills={await container.listSkills()}
       />
     </div>
   );

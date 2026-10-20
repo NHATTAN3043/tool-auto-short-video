@@ -1,3 +1,4 @@
+import { DEFAULT_CONTENT_LANGUAGE, type ContentLanguage } from "../text/language";
 import { normalizeWhitespace } from "../text/words";
 import type { VoiceSettings } from "./schema";
 
@@ -22,11 +23,15 @@ export function narrationForSpeech(narration: string): string {
 }
 
 /**
- * Identifies what a generated voice says and how: same narration (ignoring whitespace) and same settings
- * give the same hash, so only scenes whose words or voice changed are generated again.
+ * Identifies what a generated voice says and how: same narration (ignoring whitespace), same settings and
+ * same language give the same hash, so only scenes whose words or voice changed are generated again.
  */
-export function voiceContentHash(narration: string, settings: VoiceSettings): string {
-  const payload = JSON.stringify([
+export function voiceContentHash(
+  narration: string,
+  settings: VoiceSettings,
+  language: ContentLanguage = DEFAULT_CONTENT_LANGUAGE,
+): string {
+  const fields: unknown[] = [
     narrationForSpeech(narration),
     settings.provider,
     settings.voiceId,
@@ -34,6 +39,10 @@ export function voiceContentHash(narration: string, settings: VoiceSettings): st
     settings.stability,
     settings.similarityBoost,
     settings.speed,
-  ]);
+  ];
+  // Voices made before the project language existed were Vietnamese: leaving the default out keeps
+  // their hash, so they are not marked outdated (ADR 0013).
+  if (language !== DEFAULT_CONTENT_LANGUAGE) fields.push(language);
+  const payload = JSON.stringify(fields);
   return `tts1:${fnv1a64(payload)}`;
 }

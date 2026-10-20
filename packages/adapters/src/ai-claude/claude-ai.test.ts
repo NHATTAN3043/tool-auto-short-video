@@ -242,6 +242,49 @@ describe("ClaudeAi", () => {
     expect(content).toContain("Toàn bộ script.");
   });
 
+  it("sends a skill as reference notes followed by the Vietnamese rules, in calls and estimates", async () => {
+    const guidance = {
+      id: "viral-hooks",
+      name: "viral-hooks",
+      description: "Hooks",
+      language: "en" as const,
+      content: "Open with a pattern interrupt. Example: Stop scrolling!",
+    };
+    const s = setup([
+      message({ title: "Mèo", script: "Một.\n\nHai." }),
+      () => Response.json({ input_tokens: 900 }),
+    ]);
+    await s.ai.generateScript({ ...scriptInput, skillId: "viral-hooks" }, guidance);
+    await s.ai.estimate({ type: "script", input: { ...scriptInput, skillId: "viral-hooks" } }, guidance);
+    for (const body of s.bodies()) {
+      const system = String(body.system);
+      expect(system).toContain(guidance.content);
+      // The rules come after the notes, so the model reads them last.
+      expect(system.indexOf("QUY TẮC BẮT BUỘC")).toBeGreaterThan(system.indexOf(guidance.content));
+      expect(JSON.stringify(body.messages)).toContain(
+        "Nhắc lại: mọi lời đọc phải viết hoàn toàn bằng tiếng Việt.",
+      );
+    }
+  });
+
+  it("keeps the plain system prompt without a skill", async () => {
+    const s = setup([message({ title: "Mèo", script: "Một.\n\nHai." })]);
+    await s.ai.generateScript(scriptInput);
+    expect(String(s.bodies()[0]?.system)).not.toContain("<skill>");
+    expect(JSON.stringify(s.bodies()[0]?.messages)).not.toContain("Nhắc lại");
+  });
+
+  it("asks for English narration in an English project, with the reminder even without a skill", async () => {
+    const s = setup([message({ title: "Cats", script: "One.\n\nTwo." })]);
+    await s.ai.generateScript({ ...scriptInput, language: "en" });
+    const system = String(s.bodies()[0]?.system);
+    expect(system).toContain("khán giả nói tiếng Anh");
+    expect(system).not.toContain("khán giả Việt Nam");
+    expect(JSON.stringify(s.bodies()[0]?.messages)).toContain(
+      "Nhắc lại: mọi lời đọc phải viết hoàn toàn bằng tiếng Anh.",
+    );
+  });
+
   it("sizes max_tokens by the task", () => {
     expect(outputBudget({ type: "script", input: scriptInput }).max).toBe(4000);
     const long = "từ ".repeat(3000);
@@ -251,5 +294,69 @@ describe("ClaudeAi", () => {
     expect(
       outputBudget({ type: "visual", input: { script: "", scenes: [{ id: "a", narration: "x" }] } }).max,
     ).toBe(3000);
+  });
+
+  it("asks brief questions in Vietnamese, even for an English video, and numbers them", async () => {
+    const s = setup([
+      message({
+        questions: [{ text: "Video cho ai?", kind: "single", options: ["Người nuôi mèo", "Trẻ em"] }],
+      }),
+    ]);
+    const result = await s.ai.generateBriefQuestions({ ...scriptInput, tone: "hài hước", language: "en" });
+    expect(result.data).toEqual({
+      questions: [{ id: "q1", text: "Video cho ai?", kind: "single", options: ["Người nuôi mèo", "Trẻ em"] }],
+    });
+    const prompt = JSON.stringify(s.bodies()[0]?.messages);
+    expect(prompt).toContain("Mọi câu hỏi và lựa chọn viết bằng tiếng Việt");
+    expect(prompt).toContain("Giọng văn đã chọn: hài hước.");
+    expect(prompt).not.toContain("Nhắc lại");
+  });
+
+  it("writes an outline from the answers, and a revision from the feedback", async () => {
+    const scene = {
+      narration: "Mèo ngủ mười sáu tiếng.",
+      intent: "Mèo ngủ",
+      preferredMedia: "video",
+      searchQueries: ["cat sleeping"],
+      searchQueriesVi: ["mèo ngủ"],
+      searchQueriesZh: ["猫睡觉"],
+    };
+    const s = setup([message({ title: "Mèo", scenes: [scene] }), message({ title: "Mèo", scenes: [scene] })]);
+    const answers = [{ question: "Video cho ai?", answer: "Trẻ em" }];
+    const result = await s.ai.generateScriptOutline({ ...scriptInput, answers });
+    expect(result.data).toEqual({
+      title: "Mèo",
+      scenes: [
+        {
+          narration: "Mèo ngủ mười sáu tiếng.",
+          visualPlan: {
+            intent: "Mèo ngủ",
+            preferredMedia: "video",
+            searchQueries: ["cat sleeping"],
+            localizedQueries: { vi: ["mèo ngủ"], zh: ["猫睡觉"] },
+          },
+        },
+      ],
+    });
+    expect(JSON.stringify(s.bodies()[0]?.messages)).toContain("Video cho ai? → Trẻ em");
+
+    await s.ai.generateScriptOutline({
+      ...scriptInput,
+      answers: [],
+      revision: { feedback: "hook mạnh hơn", scenes: ["Câu cũ."] },
+    });
+    const revision = JSON.stringify(s.bodies()[1]?.messages);
+    expect(revision).toContain("Người dùng không trả lời thêm câu hỏi nào");
+    expect(revision).toContain("Cảnh 1: Câu cũ.");
+    expect(revision).toContain("Góp ý của người dùng: hook mạnh hơn");
+  });
+
+  it("sizes the outline like a script with its scene plan", () => {
+    expect(outputBudget({ type: "brief_questions", input: scriptInput }).max).toBe(3000);
+    expect(outputBudget({ type: "script_outline", input: { ...scriptInput, answers: [] } }).max).toBe(6000);
+    expect(
+      outputBudget({ type: "script_outline", input: { ...scriptInput, targetDurationSec: 180, answers: [] } })
+        .max,
+    ).toBeGreaterThan(6000);
   });
 });

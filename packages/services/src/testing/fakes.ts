@@ -12,7 +12,12 @@ import {
   sumUsageUsd,
   matchesUsageFilter,
   type AiTask,
+  type BriefQuestionsRequest,
+  type BriefQuestionsSuggestion,
+  type ScriptOutlineRequest,
+  type ScriptOutlineSuggestion,
   type ApiUsageEntry,
+  type ContentLanguage,
   type BudgetCheck,
   type BudgetLimits,
   type BudgetSettings,
@@ -33,6 +38,8 @@ import {
   type ScenePlanSuggestion,
   type ScriptRequest,
   type ScriptSuggestion,
+  type SkillGuidance,
+  type SkillSummary,
   type VisualPlanRequest,
   type VisualPlansSuggestion,
   type VoiceSettings,
@@ -52,6 +59,7 @@ import type { RemoteFile, RemoteFilePort } from "../ports/remote-files";
 import type { ProjectRepository, ProjectSummary } from "../ports/project-repository";
 import type { RendererPort, RenderRequest } from "../ports/renderer";
 import type { SfxLibraryRepository } from "../ports/sfx-library";
+import type { SkillCatalogPort } from "../ports/skill-catalog";
 import type { StoragePort } from "../ports/storage";
 import type {
   SpeechContext,
@@ -390,7 +398,12 @@ export class FakeArchive implements ArchivePort {
 export class FakeTts implements TtsPort {
   readonly id = "fake";
   readonly models: readonly TtsModel[] = [{ id: "m1", name: "Model 1", creditsPerCharacter: 0.5 }];
-  readonly calls: { text: string; voice: VoiceSettings; context?: SpeechContext }[] = [];
+  readonly calls: {
+    text: string;
+    voice: VoiceSettings;
+    language: ContentLanguage;
+    context?: SpeechContext;
+  }[] = [];
   voices: TtsVoice[] = [{ id: "v1", name: "Giọng 1", labels: { gender: "female" } }];
   failFor = new Set<string>();
   failList = false;
@@ -399,13 +412,27 @@ export class FakeTts implements TtsPort {
     return this.failList ? Promise.reject(new Error("401 invalid key")) : Promise.resolve(this.voices);
   }
 
+  /** Voices listed in `samples` have a recorded sample. */
+  samples = new Set<string>(["v1"]);
+
+  voiceSample(voiceId: string): Promise<SynthesizedSpeech | null> {
+    if (this.failList) return Promise.reject(new Error("401 invalid key"));
+    if (!this.samples.has(voiceId)) return Promise.resolve(null);
+    return Promise.resolve({ audio: new TextEncoder().encode(`sample:${voiceId}`), extension: "mp3" });
+  }
+
   estimate(text: string): TtsEstimate {
     const credits = text.length * 0.5;
     return { characters: text.length, credits, usd: credits * 0.0006 };
   }
 
-  synthesize(text: string, voice: VoiceSettings, context?: SpeechContext): Promise<SynthesizedSpeech> {
-    this.calls.push({ text, voice, ...(context && { context }) });
+  synthesize(
+    text: string,
+    voice: VoiceSettings,
+    language: ContentLanguage,
+    context?: SpeechContext,
+  ): Promise<SynthesizedSpeech> {
+    this.calls.push({ text, voice, language, ...(context && { context }) });
     if (this.failFor.has(text)) return Promise.reject(new Error(`provider failed for ${text}`));
     return Promise.resolve({ audio: new TextEncoder().encode(`voice:${text}`), extension: "mp3" });
   }
@@ -416,6 +443,9 @@ export class FakeAi implements AiPort {
   readonly id = "fake-ai";
   readonly model = "fake-model";
   readonly calls: AiTask[] = [];
+  /** The skill each call (and each estimate) received, by position; undefined without one. */
+  readonly guidance: (SkillGuidance | undefined)[] = [];
+  readonly estimateGuidance: (SkillGuidance | undefined)[] = [];
   usage: AiUsage = { inputTokens: 1000, outputTokens: 500, usd: 0.007 };
   estimateResult: AiEstimate = {
     inputTokens: 1000,
@@ -441,22 +471,24 @@ export class FakeAi implements AiPort {
     ],
   };
 
-  estimate(): Promise<AiEstimate> {
+  estimate(_task: AiTask, guidance?: SkillGuidance): Promise<AiEstimate> {
+    this.estimateGuidance.push(guidance);
     return Promise.resolve(this.estimateResult);
   }
 
-  private answer<T>(task: AiTask, data: T): Promise<AiCall<T>> {
+  private answer<T>(task: AiTask, data: T, guidance?: SkillGuidance): Promise<AiCall<T>> {
     this.calls.push(task);
+    this.guidance.push(guidance);
     if (this.failWith) return Promise.reject(this.failWith);
     return Promise.resolve({ data, usage: this.usage });
   }
 
-  generateScript(input: ScriptRequest): Promise<AiCall<ScriptSuggestion>> {
-    return this.answer({ type: "script", input }, this.script);
+  generateScript(input: ScriptRequest, guidance?: SkillGuidance): Promise<AiCall<ScriptSuggestion>> {
+    return this.answer({ type: "script", input }, this.script, guidance);
   }
 
-  planScenes(input: ScenePlanRequest): Promise<AiCall<ScenePlanSuggestion>> {
-    return this.answer({ type: "scenes", input }, this.scenes);
+  planScenes(input: ScenePlanRequest, guidance?: SkillGuidance): Promise<AiCall<ScenePlanSuggestion>> {
+    return this.answer({ type: "scenes", input }, this.scenes, guidance);
   }
 
   /** Ranks each scene's candidates in reverse order, so tests can tell a ranked list from the original. */
@@ -476,11 +508,52 @@ export class FakeAi implements AiPort {
     );
   }
 
-  rewriteScene(input: SceneRewriteRequest): Promise<AiCall<SceneRewriteSuggestion>> {
-    return this.answer({ type: "rewrite_scene", input }, { narration: `${input.narration} (viết lại)` });
+  rewriteScene(
+    input: SceneRewriteRequest,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<SceneRewriteSuggestion>> {
+    return this.answer(
+      { type: "rewrite_scene", input },
+      { narration: `${input.narration} (viết lại)` },
+      guidance,
+    );
   }
 
-  generateVisualPlans(input: VisualPlanRequest): Promise<AiCall<VisualPlansSuggestion>> {
+  questions: BriefQuestionsSuggestion = {
+    questions: [{ id: "q1", text: "Video cho ai?", kind: "single", options: ["Người nuôi mèo", "Trẻ em"] }],
+  };
+  outline: ScriptOutlineSuggestion = {
+    title: "Mèo",
+    scenes: [
+      {
+        narration: "Câu một.",
+        visualPlan: { intent: "Mèo", preferredMedia: "video", searchQueries: ["cat"] },
+      },
+      {
+        narration: "Câu hai.",
+        visualPlan: { intent: "Chó", preferredMedia: "image", searchQueries: ["dog"] },
+      },
+    ],
+  };
+
+  generateBriefQuestions(
+    input: BriefQuestionsRequest,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<BriefQuestionsSuggestion>> {
+    return this.answer({ type: "brief_questions", input }, this.questions, guidance);
+  }
+
+  generateScriptOutline(
+    input: ScriptOutlineRequest,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<ScriptOutlineSuggestion>> {
+    return this.answer({ type: "script_outline", input }, this.outline, guidance);
+  }
+
+  generateVisualPlans(
+    input: VisualPlanRequest,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<VisualPlansSuggestion>> {
     return this.answer(
       { type: "visual", input },
       {
@@ -493,7 +566,35 @@ export class FakeAi implements AiPort {
           },
         })),
       },
+      guidance,
     );
+  }
+}
+
+/** Skills held in memory; `content` defaults to a short note naming the skill. */
+export class FakeSkillCatalog implements SkillCatalogPort {
+  readonly skills = new Map<string, SkillGuidance>();
+
+  constructor(skills: readonly (SkillSummary & { content?: string })[] = []) {
+    for (const skill of skills) {
+      this.skills.set(skill.id, { ...skill, content: skill.content ?? `Hướng dẫn của ${skill.name}` });
+    }
+  }
+
+  list(): Promise<SkillSummary[]> {
+    return Promise.resolve(
+      [...this.skills.values()]
+        .map(({ id, name, description, language }) => ({ id, name, description, language }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    );
+  }
+
+  /** The language asked for at each `get`, by position. */
+  readonly languages: (ContentLanguage | undefined)[] = [];
+
+  get(id: string, language?: ContentLanguage): Promise<SkillGuidance | null> {
+    this.languages.push(language);
+    return Promise.resolve(this.skills.get(id) ?? null);
   }
 }
 

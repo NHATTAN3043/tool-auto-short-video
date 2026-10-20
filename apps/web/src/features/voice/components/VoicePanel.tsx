@@ -1,9 +1,16 @@
 "use client";
 
-import { scenesNeedingLoudness, type Project, type VoiceSettings } from "@studio/domain";
+import {
+  projectLanguage,
+  scenesNeedingLoudness,
+  type ContentLanguage,
+  type Project,
+  type VoiceSettings,
+} from "@studio/domain";
 import { AudioLinesIcon, MicIcon, RefreshCwIcon } from "lucide-react";
 import { useId } from "react";
 
+import { LanguageSelect } from "@/features/project";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Label } from "@/shared/ui/label";
@@ -12,6 +19,7 @@ import { Slider } from "@/shared/ui/slider";
 import type { VoiceCatalogState } from "../hooks/use-voice-catalog";
 import type { VoiceJobsState } from "../hooks/use-voice-jobs";
 import { initialVoiceSettings, sceneNumbers, VOICE_LIMITS, voiceOptionLabel, voiceOverview } from "../model";
+import { VoicePreview } from "./VoicePreview";
 
 const SELECT_CLASS =
   "h-9 w-full rounded-md border bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
@@ -52,12 +60,15 @@ export function VoicePanel({
   catalog,
   jobs,
   onSettingsChange,
+  onLanguageChange,
   onCommit,
 }: {
   project: Project;
   catalog: VoiceCatalogState;
   jobs: VoiceJobsState;
   onSettingsChange: (settings: VoiceSettings) => void;
+  /** Sets the project language, shared with Full AI: the voice is told to read in it. */
+  onLanguageChange: (language: ContentLanguage) => void;
   /** Ends a slider drag, so the drag is one undo step. */
   onCommit: () => void;
 }) {
@@ -155,6 +166,11 @@ export function VoicePanel({
                 ))}
               </select>
             </div>
+            <LanguageSelect
+              label="Ngôn ngữ đọc"
+              value={projectLanguage(project)}
+              onChange={onLanguageChange}
+            />
             <div className="flex flex-col gap-2 md:col-span-2">
               <TuningRow
                 label="Ổn định"
@@ -183,8 +199,9 @@ export function VoicePanel({
                 }}
                 onCommit={onCommit}
               />
+              <VoicePreview project={project} settings={settings} catalog={loaded} />
               <p className="text-xs text-muted-foreground">
-                Đổi giọng, model hoặc các thanh trên sẽ đánh dấu mọi giọng đã tạo là “Lời đã đổi”.
+                Đổi giọng, model, ngôn ngữ hoặc các thanh trên sẽ đánh dấu mọi giọng đã tạo là “Lời đã đổi”.
               </p>
             </div>
           </div>

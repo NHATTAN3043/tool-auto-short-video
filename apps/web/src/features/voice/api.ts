@@ -1,5 +1,7 @@
 import {
   BudgetCheckSchema,
+  type ContentLanguage,
+  type VoiceSettings,
   ProjectSchema,
   RenderJobSchema,
   type Project,
@@ -85,4 +87,24 @@ export function getJob(projectId: string, jobId: string): Promise<RenderJob> {
 /** The stored project, to pick up the voices the worker attached. */
 export function fetchProject(projectId: string): Promise<Project> {
   return request(projectBase(projectId), { method: "GET" }, ProjectSchema);
+}
+
+export const VoicePreviewSchema = z.object({ path: z.string(), cached: z.boolean() });
+export type VoicePreview = z.infer<typeof VoicePreviewSchema>;
+
+/** Speaks a short sentence with the shown settings (paid unless the same preview was made before). */
+export function previewVoice(
+  projectId: string,
+  input: { text: string; voice: VoiceSettings; language: ContentLanguage },
+): Promise<VoicePreview> {
+  return request(
+    `${projectBase(projectId)}/voices/preview`,
+    { method: "POST", body: JSON.stringify(input) },
+    VoicePreviewSchema,
+  );
+}
+
+/** URL of the provider's free recorded sample of a voice. */
+export function voiceSampleUrl(voiceId: string): string {
+  return `/api/voices/${encodeURIComponent(voiceId)}/sample`;
 }

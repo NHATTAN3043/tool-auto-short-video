@@ -19,6 +19,7 @@ export {
   type AiPort,
   type RankImage,
 } from "./ports/ai";
+export type { SkillCatalogPort } from "./ports/skill-catalog";
 export type { SpeechContext, SynthesizedSpeech, TtsEstimate, TtsModel, TtsPort, TtsVoice } from "./ports/tts";
 export type {
   ApiUsageLog,
@@ -94,6 +95,13 @@ export {
   type NormalizeSceneVoicesInput,
 } from "./voice/normalize-scene-voices";
 export { makeListTtsVoices, type TtsCatalog } from "./voice/list-tts-voices";
+export { makeGetVoiceSample } from "./voice/get-voice-sample";
+export {
+  makePreviewVoice,
+  VOICE_PREVIEW_FOLDER,
+  type PreviewVoiceInput,
+  type PreviewVoiceResult,
+} from "./voice/preview-voice";
 export {
   makeEstimateAiTask,
   type AiTaskDeps,
@@ -148,3 +156,10 @@ export {
   type RunFullAiResult,
 } from "./full-ai/run-full-ai";
 export { makeGetFullAiResult, makeGetLatestFullAi } from "./full-ai/get-full-ai-result";
+export {
+  fullAiDraftKey,
+  makeDeleteFullAiDraft,
+  makeGetFullAiDraft,
+  makeSaveFullAiDraft,
+} from "./full-ai/draft";
+export { makeListSkills, resolveSkill, taskSkillId } from "./skill/skills";

@@ -468,4 +468,20 @@ describe("editor reducer: Full AI review", () => {
     expect(remembered.project.mediaRankingMode).toBe("vision");
     expect(canUndo(remembered)).toBe(false);
   });
+
+  it("remembers the skill without an undo step, and forgets it on none", () => {
+    const start = createEditorState(project([scene("a", "Một.")]));
+    const chosen = editorReducer(start, { type: "setAiSkill", skillId: "viral-hooks" });
+    expect(chosen.project.aiSkillId).toBe("viral-hooks");
+    expect(canUndo(chosen)).toBe(false);
+    const cleared = editorReducer(chosen, { type: "setAiSkill", skillId: undefined });
+    expect("aiSkillId" in cleared.project).toBe(false);
+  });
+
+  it("sets the project language without an undo step", () => {
+    const start = createEditorState(project([scene("a", "Một.")]));
+    const english = editorReducer(start, { type: "setLanguage", language: "en" });
+    expect(english.project.language).toBe("en");
+    expect(canUndo(english)).toBe(false);
+  });
 });

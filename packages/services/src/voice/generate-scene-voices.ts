@@ -3,6 +3,7 @@ import {
   isDomainError,
   narrationForSpeech,
   newId,
+  projectLanguage,
   sceneVoiceStatus,
   setSceneVoice,
   voiceContentHash,
@@ -117,6 +118,7 @@ export function makeGenerateSceneVoices(deps: GenerateSceneVoicesDeps) {
       // Re-read every time: the user keeps editing while the job runs.
       const project = await deps.repo.get(input.projectId);
       const voice = project.voice;
+      const language = projectLanguage(project);
       if (voice === undefined) {
         throw new DomainError("INVALID_OPERATION", "The project has no voice settings");
       }
@@ -137,6 +139,7 @@ export function makeGenerateSceneVoices(deps: GenerateSceneVoicesDeps) {
         const speech = await tts.synthesize(
           narrationForSpeech(scene.narration),
           voice,
+          language,
           speechContext(project.scenes, index),
         );
         const path = `media/${assetId}.${speech.extension}`;
@@ -151,7 +154,7 @@ export function makeGenerateSceneVoices(deps: GenerateSceneVoicesDeps) {
           source: "tts",
           fileName: `giong-canh-${String(index + 1).padStart(2, "0")}.${speech.extension}`,
           path,
-          contentHash: voiceContentHash(scene.narration, voice),
+          contentHash: voiceContentHash(scene.narration, voice, language),
           createdAt: deps.clock.now(),
           ...(normalized && { loudnessNormalized: true }),
         };

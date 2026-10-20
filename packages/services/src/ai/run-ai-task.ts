@@ -1,19 +1,24 @@
 import {
   AiResultSchema,
   isDomainError,
+  normalizeBriefQuestions,
   normalizeMediaRanking,
   normalizeScenePlan,
   normalizeSceneRewrite,
+  normalizeScriptOutline,
   normalizeScriptSuggestion,
   normalizeVisualPlans,
   type AiResult,
   type AiTask,
   type RenderJob,
+  type SkillGuidance,
 } from "@studio/domain";
 
 import { AiCallError, type AiPort, type RankImage } from "../ports/ai";
 import type { PaidPortFactory } from "../ports/cost-guard";
+import type { SkillCatalogPort } from "../ports/skill-catalog";
 import type { StoragePort } from "../ports/storage";
+import { resolveSkill, taskLanguage, taskSkillId } from "../skill/skills";
 import type { ResolveRankImages } from "./rank-images";
 
 export type RunAiTaskResult =
@@ -42,18 +47,23 @@ function failureMessage(error: unknown): string {
 
 const noImages: ResolveRankImages = () => Promise.resolve(new Map<string, RankImage>());
 
-async function call(ai: AiPort, task: AiTask, rankImages: ResolveRankImages): Promise<AiResult> {
+async function call(
+  ai: AiPort,
+  task: AiTask,
+  rankImages: ResolveRankImages,
+  guidance: SkillGuidance | undefined,
+): Promise<AiResult> {
   switch (task.type) {
     case "script": {
-      const { data, usage } = await ai.generateScript(task.input);
-      return { type: "script", suggestion: normalizeScriptSuggestion(data), usage };
+      const { data, usage } = await ai.generateScript(task.input, guidance);
+      return { type: "script", suggestion: normalizeScriptSuggestion(data, task.input.language), usage };
     }
     case "scenes": {
-      const { data, usage } = await ai.planScenes(task.input);
+      const { data, usage } = await ai.planScenes(task.input, guidance);
       return { type: "scenes", suggestion: normalizeScenePlan(data), usage };
     }
     case "visual": {
-      const { data, usage } = await ai.generateVisualPlans(task.input);
+      const { data, usage } = await ai.generateVisualPlans(task.input, guidance);
       const sceneIds = task.input.scenes.map((scene) => scene.id);
       return { type: "visual", suggestion: normalizeVisualPlans(data, sceneIds), usage };
     }
@@ -62,8 +72,24 @@ async function call(ai: AiPort, task: AiTask, rankImages: ResolveRankImages): Pr
       return { type: "rank_media", suggestion: normalizeMediaRanking(data, task.input), usage };
     }
     case "rewrite_scene": {
-      const { data, usage } = await ai.rewriteScene(task.input);
-      return { type: "rewrite_scene", suggestion: normalizeSceneRewrite(data), usage };
+      const { data, usage } = await ai.rewriteScene(task.input, guidance);
+      return {
+        type: "rewrite_scene",
+        suggestion: normalizeSceneRewrite(data, task.input.language),
+        usage,
+      };
+    }
+    case "brief_questions": {
+      const { data, usage } = await ai.generateBriefQuestions(task.input, guidance);
+      return { type: "brief_questions", suggestion: normalizeBriefQuestions(data), usage };
+    }
+    case "script_outline": {
+      const { data, usage } = await ai.generateScriptOutline(task.input, guidance);
+      return {
+        type: "script_outline",
+        suggestion: normalizeScriptOutline(data, task.input.language),
+        usage,
+      };
     }
   }
 }
@@ -78,15 +104,21 @@ export function makeRunAiTask(deps: {
   storage: StoragePort;
   /** Thumbnails for vision ranking; without it every ranking reads descriptions only. */
   rankImages?: ResolveRankImages;
+  /** Installed skills; without it a task naming a skill fails. */
+  skills?: SkillCatalogPort;
 }) {
   return async (job: RenderJob): Promise<RunAiTaskResult> => {
     if (!job.ai) return { ok: false, message: "Job AI thiếu nội dung yêu cầu", costUsd: 0 };
     let result: AiResult;
     try {
+      // Read here, not when queued: the skill file may have changed or been removed since.
+      const task = job.ai.task;
+      const guidance = await resolveSkill(deps.skills ?? null, taskSkillId(task), taskLanguage(task));
       result = await call(
         deps.ai({ projectId: job.projectId, jobId: job.id }),
-        job.ai.task,
+        task,
         deps.rankImages ?? noImages,
+        guidance,
       );
     } catch (error) {
       const costUsd = error instanceof AiCallError ? (error.usage?.usd ?? 0) : 0;

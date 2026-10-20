@@ -2,10 +2,15 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import type { Project, RenderJob } from "@studio/domain";
+import { newFullAiDraft, type Project, type RenderJob } from "@studio/domain";
 import { FakeAi, FakeTts } from "@studio/services/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  DELETE as deleteDraftRoute,
+  GET as getDraftRoute,
+  PUT as putDraftRoute,
+} from "@/app/api/projects/[id]/full-ai/draft/route";
 import { POST as estimateRoute } from "@/app/api/projects/[id]/full-ai/estimate/route";
 import { GET as resultRoute } from "@/app/api/projects/[id]/full-ai/jobs/[jobId]/route";
 import { POST as jobsRoute } from "@/app/api/projects/[id]/full-ai/jobs/route";
@@ -75,5 +80,23 @@ describe("Full AI API", () => {
     const res = await estimateRoute(post({ request }), ctx(p.id));
     expect(res.status).toBe(404);
     expect(await res.json()).toMatchObject({ error: { code: "AI_UNAVAILABLE" } });
+  });
+
+  it("saves, reads and deletes the draft, and refuses an invalid one", async () => {
+    const p = await project();
+    const get = async () =>
+      (await (await getDraftRoute(new Request("http://x"), ctx(p.id))).json()) as unknown;
+    expect(await get()).toEqual({ draft: null });
+
+    const draft = { ...newFullAiDraft({ now: "2026-01-01T00:00:00.000Z" }), idea: "Mèo" };
+    const put = (body: unknown) => new Request("http://x", { method: "PUT", body: JSON.stringify(body) });
+    const saved = await putDraftRoute(put({ draft }), ctx(p.id));
+    expect(saved.status).toBe(200);
+    expect(await get()).toMatchObject({ draft: { idea: "Mèo", step: "idea" } });
+    expect((await putDraftRoute(put({ draft: { ...draft, step: "x" } }), ctx(p.id))).status).toBe(400);
+    expect((await putDraftRoute(put({ draft }), ctx("prj_missing"))).status).toBe(404);
+
+    expect((await deleteDraftRoute(new Request("http://x"), ctx(p.id))).status).toBe(204);
+    expect(await get()).toEqual({ draft: null });
   });
 });

@@ -1,4 +1,4 @@
-import type { VoiceSettings } from "@studio/domain";
+import type { ContentLanguage, VoiceSettings } from "@studio/domain";
 
 export interface TtsVoice {
   id: string;
@@ -39,10 +39,21 @@ export interface SpeechContext {
 export interface TtsPort {
   /** Stored in VoiceSettings.provider. */
   readonly id: string;
-  /** Models usable for this studio (Vietnamese capable), the default first. */
+  /** Models usable for this studio (they speak every ContentLanguage), the default first. */
   readonly models: readonly TtsModel[];
   listVoices(): Promise<TtsVoice[]>;
+  /**
+   * The provider's own recorded sample of a voice, as it sounds with its default settings. Free; null when the
+   * voice has none.
+   */
+  voiceSample(voiceId: string): Promise<SynthesizedSpeech | null>;
   /** Pure estimate, no network call. */
   estimate(text: string, voice: VoiceSettings): TtsEstimate;
-  synthesize(text: string, voice: VoiceSettings, context?: SpeechContext): Promise<SynthesizedSpeech>;
+  /** `language` is the project language, told to the provider so it does not guess from a short text. */
+  synthesize(
+    text: string,
+    voice: VoiceSettings,
+    language: ContentLanguage,
+    context?: SpeechContext,
+  ): Promise<SynthesizedSpeech>;
 }

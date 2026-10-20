@@ -1,5 +1,7 @@
 import type {
   AiTask,
+  BriefQuestionsRequest,
+  BriefQuestionsSuggestion,
   AiUsage,
   MediaRankingSuggestion,
   MediaRankRequest,
@@ -7,7 +9,10 @@ import type {
   ScenePlanSuggestion,
   SceneRewriteRequest,
   SceneRewriteSuggestion,
+  ScriptOutlineRequest,
+  ScriptOutlineSuggestion,
   ScriptRequest,
+  SkillGuidance,
   ScriptSuggestion,
   VisualPlanRequest,
   VisualPlansSuggestion,
@@ -53,16 +58,22 @@ export type RankImage =
   | { type: "url"; url: string }
   | { type: "base64"; mediaType: "image/jpeg" | "image/png" | "image/webp"; data: string };
 
-/** A text AI provider. Paid: called only from the worker (and the free estimate from the server). */
+/**
+ * A text AI provider. Paid: called only from the worker (and the free estimate from the server).
+ * `guidance` is the skill named by the request's `skillId`, already read by the service (ADR 0012).
+ */
 export interface AiPort {
   readonly id: string;
   readonly model: string;
   /** Cost before running; may count tokens through the provider's free endpoint. */
-  estimate(task: AiTask): Promise<AiEstimate>;
-  generateScript(input: ScriptRequest): Promise<AiCall<ScriptSuggestion>>;
-  planScenes(input: ScenePlanRequest): Promise<AiCall<ScenePlanSuggestion>>;
+  estimate(task: AiTask, guidance?: SkillGuidance): Promise<AiEstimate>;
+  generateScript(input: ScriptRequest, guidance?: SkillGuidance): Promise<AiCall<ScriptSuggestion>>;
+  planScenes(input: ScenePlanRequest, guidance?: SkillGuidance): Promise<AiCall<ScenePlanSuggestion>>;
   /** One call for all scenes; `sceneId`s in the answer are those of `input.scenes`. */
-  generateVisualPlans(input: VisualPlanRequest): Promise<AiCall<VisualPlansSuggestion>>;
+  generateVisualPlans(
+    input: VisualPlanRequest,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<VisualPlansSuggestion>>;
   /**
    * Orders each scene's candidates, best first; keys in the answer are those of the request. In vision
    * mode `images` holds the thumbnails by candidate key (candidates without one are ranked by text).
@@ -71,5 +82,15 @@ export interface AiPort {
     input: MediaRankRequest,
     images: ReadonlyMap<string, RankImage>,
   ): Promise<AiCall<MediaRankingSuggestion>>;
-  rewriteScene(input: SceneRewriteRequest): Promise<AiCall<SceneRewriteSuggestion>>;
+  rewriteScene(input: SceneRewriteRequest, guidance?: SkillGuidance): Promise<AiCall<SceneRewriteSuggestion>>;
+  /** Up to five questions about the idea, before writing (ADR 0015); none when it is clear enough. */
+  generateBriefQuestions(
+    input: BriefQuestionsRequest,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<BriefQuestionsSuggestion>>;
+  /** Narration and visual plan per scene, from the idea and the answers, for the user to review. */
+  generateScriptOutline(
+    input: ScriptOutlineRequest,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<ScriptOutlineSuggestion>>;
 }

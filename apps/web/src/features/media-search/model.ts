@@ -1,4 +1,11 @@
-import type { MediaLink, MediaSourceFilter, SearchLanguage, VisualPlan } from "@studio/domain";
+import {
+  narrationKeywords,
+  type ContentLanguage,
+  type MediaLink,
+  type MediaSourceFilter,
+  type SearchLanguage,
+  type VisualPlan,
+} from "@studio/domain";
 
 // Pure rules of the media search panel: where files are loaded from, which keywords to offer.
 
@@ -27,6 +34,17 @@ export function libraryFileUrl(id: string, file: "media" | "thumbnail"): string 
 export interface KeywordGroup {
   lang: SearchLanguage;
   queries: string[];
+  /** Shown instead of the language name. */
+  label?: string;
+}
+
+/**
+ * Free keywords cut from the narration, for a scene without AI keywords: works in every mode, without any
+ * key. Null when the narration has nothing to search with.
+ */
+export function narrationKeywordGroup(narration: string, language: ContentLanguage): KeywordGroup | null {
+  const queries = narrationKeywords(narration, language);
+  return queries.length === 0 ? null : { lang: language, queries, label: "Từ lời đọc" };
 }
 
 /** The scene's keywords per language, English first; empty languages are left out. */
@@ -58,9 +76,12 @@ export function queryForLanguage(
   return queriesFor(plan, lang)[0] ?? current;
 }
 
-/** First keyword to prefill the search with: English, else any language. */
-export function initialSearch(plan: VisualPlan | undefined): { query: string; lang: SearchLanguage } {
-  const first = keywordGroups(plan)[0];
+/** First keyword to prefill the search with: English, else any language, else the narration's. */
+export function initialSearch(
+  plan: VisualPlan | undefined,
+  fallback: KeywordGroup | null = null,
+): { query: string; lang: SearchLanguage } {
+  const first = keywordGroups(plan)[0] ?? fallback ?? undefined;
   return { query: first?.queries[0] ?? "", lang: first?.lang ?? "en" };
 }
 

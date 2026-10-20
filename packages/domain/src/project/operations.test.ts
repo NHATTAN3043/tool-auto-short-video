@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { asset, project } from "../testing/fixtures";
-import { setMusic, setProjectVoice, updateStyle } from "./operations";
+import { withProjectLanguage } from "../ai/apply";
+import { projectLanguage, setMusic, setProjectLanguage, setProjectVoice, updateStyle } from "./operations";
+import { ProjectSchema } from "./schema";
 
 const withAssets = () =>
   project({ assets: [asset("voice", "audio"), asset("song", "audio"), asset("clip", "video")] });
@@ -69,5 +71,35 @@ describe("updateStyle", () => {
     ["a negative transition", { transitionMs: -1 }],
   ])("rejects %s", (_label, patch) => {
     expect(() => updateStyle(project(), patch)).toThrow(expect.objectContaining({ code: "INVALID_INPUT" }));
+  });
+});
+
+describe("project language", () => {
+  it("defaults to Vietnamese, is set and validated, and stays a valid project", () => {
+    const original = project();
+    expect(projectLanguage(original)).toBe("vi");
+    const english = setProjectLanguage(original, "en");
+    expect(projectLanguage(english)).toBe("en");
+    expect(ProjectSchema.parse(english).language).toBe("en");
+    expect(() => setProjectLanguage(original, "fr" as "en")).toThrow();
+  });
+
+  it("is filled into the tasks that write or split narration, never the others", () => {
+    const english = setProjectLanguage(project(), "en");
+    const script = withProjectLanguage(
+      { type: "script", input: { idea: "Mèo", targetDurationSec: 30, language: "vi" } },
+      english,
+    );
+    expect(script.type === "script" && script.input.language).toBe("en");
+    const rewrite = withProjectLanguage(
+      { type: "rewrite_scene", input: { script: "", narration: "Một." } },
+      english,
+    );
+    expect(rewrite.type === "rewrite_scene" && rewrite.input.language).toBe("en");
+    const visual = {
+      type: "visual" as const,
+      input: { script: "", scenes: [{ id: "s1", narration: "Một." }] },
+    };
+    expect(withProjectLanguage(visual, english)).toBe(visual);
   });
 });

@@ -159,9 +159,15 @@ describe("GuardedAi", () => {
 });
 
 describe("GuardedTts", () => {
+  it("passes the free voice sample through without logging it", async () => {
+    const s = setup();
+    expect(await s.guardedTts.voiceSample("v1")).toMatchObject({ extension: "mp3" });
+    expect(s.log.entries).toEqual([]);
+  });
+
   it("logs each synthesis with its characters and cost", async () => {
     const s = setup();
-    await s.guardedTts.synthesize("Xin chào", voice);
+    await s.guardedTts.synthesize("Xin chào", voice, "vi");
     expect(s.log.entries[0]).toMatchObject({
       service: "tts",
       provider: "fake",
@@ -176,8 +182,8 @@ describe("GuardedTts", () => {
   it("logs failures as unbilled and blocks over budget", async () => {
     const s = setup({ ...NO_BUDGET_LIMITS, perMonthUsd: 0.003 });
     s.tts.failFor.add("Lỗi");
-    await expect(s.guardedTts.synthesize("Lỗi", voice)).rejects.toThrow("provider failed");
-    await expect(s.guardedTts.synthesize("Một câu khá dài", voice)).rejects.toMatchObject({
+    await expect(s.guardedTts.synthesize("Lỗi", voice, "vi")).rejects.toThrow("provider failed");
+    await expect(s.guardedTts.synthesize("Một câu khá dài", voice, "vi")).rejects.toMatchObject({
       code: "BUDGET_EXCEEDED",
     });
     expect(s.log.entries.map((entry) => [entry.status, entry.usd])).toEqual([

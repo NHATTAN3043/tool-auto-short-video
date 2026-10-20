@@ -33,15 +33,17 @@ export function KeywordChips({
   if (groups.length === 0) {
     return (
       <p className="text-xs text-muted-foreground">
-        Cảnh chưa có từ khoá. Dùng “Gợi ý hình” ở Trợ lý AI để có từ khoá tiếng Anh, Việt và Trung.
+        Cảnh chưa có từ khoá. Gõ từ khoá bên dưới, hoặc nhờ AI gợi ý từ khoá tiếng Anh, Việt và Trung.
       </p>
     );
   }
   return (
     <div className="flex flex-col gap-2">
       {groups.map((group) => (
-        <div key={group.lang} className="flex flex-wrap items-center gap-1.5">
-          <span className="w-20 shrink-0 text-xs text-muted-foreground">{LANGUAGE_LABELS[group.lang]}</span>
+        <div key={group.label ?? group.lang} className="flex flex-wrap items-center gap-1.5">
+          <span className="w-20 shrink-0 text-xs text-muted-foreground">
+            {group.label ?? LANGUAGE_LABELS[group.lang]}
+          </span>
           {group.queries.map((query) => (
             <span key={query} className="inline-flex items-center rounded-full border text-xs">
               <button

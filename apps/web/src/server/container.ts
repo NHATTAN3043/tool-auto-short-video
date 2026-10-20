@@ -1,7 +1,14 @@
 import "server-only";
 
-import { budgetDefaults, findRepoRoot, loadRepoEnv, resolveStorageDir, type Env } from "@studio/config";
-import { BudgetCostGuard } from "@studio/adapters/cost-guard";
+import {
+  budgetDefaults,
+  findRepoRoot,
+  loadRepoEnv,
+  resolveSkillsDir,
+  resolveStorageDir,
+  type Env,
+} from "@studio/config";
+import { BudgetCostGuard, GuardedTts } from "@studio/adapters/cost-guard";
 import { FfmpegMediaProbe } from "@studio/adapters/ffmpeg";
 import { ClaudeAi } from "@studio/adapters/ai-claude";
 import { ElevenLabsTts } from "@studio/adapters/tts-elevenlabs";
@@ -25,14 +32,18 @@ import {
   JsonProjectRepository,
   JsonSfxLibrary,
 } from "@studio/adapters/repository-json";
+import { LocalSkillCatalog } from "@studio/adapters/skills-local";
 import { LocalStorage } from "@studio/adapters/storage-local";
 import {
   makeCreateProject,
   makeEstimateAiTask,
+  makeDeleteFullAiDraft,
   makeEstimateFullAi,
+  makeGetFullAiDraft,
   makeGetFullAiResult,
   makeGetLatestFullAi,
   makeRequestFullAi,
+  makeSaveFullAiDraft,
   makeGetAiResult,
   makeGetBudgetSettings,
   makeGetUsageReport,
@@ -53,7 +64,10 @@ import {
   makeListLibrarySfx,
   makeListProjects,
   makeListRenderJobs,
+  makeListSkills,
   makeListTtsVoices,
+  makeGetVoiceSample,
+  makePreviewVoice,
   makeReadLibrarySfxFile,
   makeReadProjectFile,
   makeRemoveLibrarySfx,
@@ -76,6 +90,7 @@ import {
   type MediaLibraryRepository,
   type MediaSearchPort,
   type RemoteFilePort,
+  type SkillCatalogPort,
   type TtsPort,
 } from "@studio/services";
 
@@ -90,6 +105,8 @@ export interface ContainerOverrides {
   /** Tests only: fake stock providers and downloads instead of Pexels/Pixabay and the network. */
   stockProviders?: readonly MediaSearchPort[];
   remote?: RemoteFilePort;
+  /** Tests only: fake skills instead of the STUDIO_SKILLS_DIR folder. */
+  skills?: SkillCatalogPort;
 }
 
 function createStockProviders(env: Env): MediaSearchPort[] {
@@ -116,12 +133,14 @@ interface Persistence {
   queue: JobQueuePort;
   usage: ApiUsageLog;
   budget: BudgetSettingsStore;
+  /** Releases the database connections. */
+  close: () => Promise<void>;
 }
 
 /** Postgres when DATABASE_URL is set (ADR 0005), otherwise the JSON files of ADR 0001. */
 function createPersistence(env: Env, storageDir: string, clock: Clock): Persistence {
   if (env.DATABASE_URL !== undefined) {
-    const { db } = createPgDatabase(env.DATABASE_URL);
+    const { db, close } = createPgDatabase(env.DATABASE_URL);
     return {
       repo: new PgProjectRepository(db),
       library: new PgSfxLibrary(db),
@@ -129,6 +148,7 @@ function createPersistence(env: Env, storageDir: string, clock: Clock): Persiste
       queue: new PgJobQueue(db, clock),
       usage: new PgApiUsageLog(db),
       budget: new PgBudgetSettings(db),
+      close,
     };
   }
   return {
@@ -138,6 +158,7 @@ function createPersistence(env: Env, storageDir: string, clock: Clock): Persiste
     queue: new FileJobQueue(storageDir, clock),
     usage: new JsonApiUsageLog(storageDir),
     budget: new JsonBudgetSettings(storageDir),
+    close: () => Promise.resolve(),
   };
 }
 
@@ -145,10 +166,17 @@ function createPersistence(env: Env, storageDir: string, clock: Clock): Persiste
 // the Remotion renderer (webpack, Chrome) never ends up in the Next.js server bundle.
 export function createContainer(env: Env, overrides: ContainerOverrides = {}) {
   const clock = overrides.clock ?? systemClock;
-  const storageDir = resolveStorageDir(env, findRepoRoot());
+  const repoRoot = findRepoRoot();
+  const storageDir = resolveStorageDir(env, repoRoot);
+  const skills = overrides.skills ?? new LocalSkillCatalog(resolveSkillsDir(env, repoRoot));
   // The web app only enqueues and reads jobs; the worker claims and renders them.
-  const { repo, library, mediaLibrary, queue, usage, budget } = createPersistence(env, storageDir, clock);
-  // The web app makes no paid call: it only checks budgets before queuing and shows spend (ADR 0009).
+  const { repo, library, mediaLibrary, queue, usage, budget, close } = createPersistence(
+    env,
+    storageDir,
+    clock,
+  );
+  // The web app checks budgets before queuing and shows spend (ADR 0009); its only paid call is the short
+  // voice preview, guarded like the worker's calls (ADR 0014).
   const defaults = budgetDefaults(env);
   const costGuard = new BudgetCostGuard({ log: usage, settings: budget, defaults, clock });
   const storage = new LocalStorage(storageDir);
@@ -162,7 +190,7 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}) {
   // Without keys the list is empty: only the shared library is searched.
   const providers = overrides.stockProviders ?? createStockProviders(env);
   const remote = overrides.remote ?? new FetchRemoteFiles();
-  const aiDeps = ai ? { repo, ai, queue, clock, costGuard } : null;
+  const aiDeps = ai ? { repo, ai, queue, clock, costGuard, skills } : null;
   const voiceDefaults = tts
     ? {
         provider: tts.id,
@@ -170,12 +198,18 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}) {
         ...(env.ELEVENLABS_DEFAULT_VOICE_ID !== undefined && { voiceId: env.ELEVENLABS_DEFAULT_VOICE_ID }),
       }
     : null;
-  const fullAiDeps = ai ? { repo, ai, tts, voiceDefaults, costGuard, queue, clock } : null;
+  const fullAiDeps = ai ? { repo, ai, tts, voiceDefaults, costGuard, queue, clock, skills } : null;
   return {
+    /** Releases the database connections of a container that is replaced. */
+    close,
     maxUploadBytes,
     /** Preselected when a project has no voice settings yet. */
     voiceDefaults,
     listTtsVoices: tts ? makeListTtsVoices({ tts }) : null,
+    getVoiceSample: tts ? makeGetVoiceSample({ tts }) : null,
+    previewVoice: tts
+      ? makePreviewVoice({ repo, storage, tts: (context) => new GuardedTts(tts, costGuard, context) })
+      : null,
     estimateSceneVoices: tts ? makeEstimateSceneVoices({ repo, tts, costGuard }) : null,
     requestSceneVoices: tts ? makeRequestSceneVoices({ repo, queue, tts, costGuard, clock }) : null,
     /** Free loudness balancing of existing AI voices; the worker runs it with ffmpeg, no TTS key needed. */
@@ -188,7 +222,13 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}) {
     estimateFullAi: fullAiDeps ? makeEstimateFullAi(fullAiDeps) : null,
     requestFullAi: fullAiDeps ? makeRequestFullAi(fullAiDeps) : null,
     getFullAiResult: makeGetFullAiResult({ queue, storage }),
+    /** Skills for the Full AI and rewrite pickers; empty without AI, since nothing would use them. */
+    listSkills: ai ? makeListSkills({ skills }) : () => Promise.resolve([]),
     getLatestFullAi: makeGetLatestFullAi({ queue, storage }),
+    /** The Full AI draft (ADR 0015) is free to read and save, so it works without a key too. */
+    getFullAiDraft: makeGetFullAiDraft({ repo, storage }),
+    saveFullAiDraft: makeSaveFullAiDraft({ repo, storage, clock }),
+    deleteFullAiDraft: makeDeleteFullAiDraft({ storage }),
     getBudgetSettings: makeGetBudgetSettings({ store: budget, defaults }),
     saveBudgetSettings: makeSaveBudgetSettings({ store: budget, clock }),
     getUsageReport: makeGetUsageReport({ log: usage, repo, clock }),
@@ -230,15 +270,32 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}) {
 export type WebContainer = ReturnType<typeof createContainer>;
 
 // Kept on globalThis so dev hot reloads reuse one container (one repository lock per project, one Postgres pool).
-const holder = globalThis as typeof globalThis & { __studioContainer?: WebContainer };
+// A reload of this module (container.ts or a service it wires changed) brings a new `createContainer`: the old
+// container then lacks the new services, so it is closed and rebuilt instead of reused.
+const holder = globalThis as typeof globalThis & {
+  __studioContainer?: { container: WebContainer; factory: typeof createContainer };
+};
+
+function replace(next: WebContainer | undefined): void {
+  const previous = holder.__studioContainer?.container;
+  if (previous && previous !== next) {
+    previous.close().catch((error: unknown) => {
+      console.error(error);
+    });
+  }
+  if (next) holder.__studioContainer = { container: next, factory: createContainer };
+  else delete holder.__studioContainer;
+}
 
 export function getContainer(): WebContainer {
-  holder.__studioContainer ??= createContainer(loadRepoEnv());
-  return holder.__studioContainer;
+  const cached = holder.__studioContainer;
+  if (cached?.factory === createContainer) return cached.container;
+  const container = createContainer(loadRepoEnv());
+  replace(container);
+  return container;
 }
 
 /** Tests only: forget the cached container so the next call re-reads the environment. */
 export function resetContainer(overrides?: ContainerOverrides): void {
-  delete holder.__studioContainer;
-  if (overrides) holder.__studioContainer = createContainer(loadRepoEnv(), overrides);
+  replace(overrides ? createContainer(loadRepoEnv(), overrides) : undefined);
 }

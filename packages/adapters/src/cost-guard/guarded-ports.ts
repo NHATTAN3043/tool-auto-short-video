@@ -1,13 +1,19 @@
 import type {
   AiTask,
+  BriefQuestionsRequest,
+  BriefQuestionsSuggestion,
+  ContentLanguage,
   MediaRankingSuggestion,
   MediaRankRequest,
   ScenePlanRequest,
   ScenePlanSuggestion,
   SceneRewriteRequest,
   SceneRewriteSuggestion,
+  ScriptOutlineRequest,
+  ScriptOutlineSuggestion,
   ScriptRequest,
   ScriptSuggestion,
+  SkillGuidance,
   VisualPlanRequest,
   VisualPlansSuggestion,
   VoiceSettings,
@@ -61,20 +67,27 @@ export class GuardedAi implements AiPort {
   }
 
   /** Free (token counting); not logged. */
-  estimate(task: AiTask): Promise<AiEstimate> {
-    return this.inner.estimate(task);
+  estimate(task: AiTask, guidance?: SkillGuidance): Promise<AiEstimate> {
+    return this.inner.estimate(task, guidance);
   }
 
-  generateScript(input: ScriptRequest): Promise<AiCall<ScriptSuggestion>> {
-    return this.run({ type: "script", input }, () => this.inner.generateScript(input));
+  generateScript(input: ScriptRequest, guidance?: SkillGuidance): Promise<AiCall<ScriptSuggestion>> {
+    return this.run({ type: "script", input }, () => this.inner.generateScript(input, guidance), guidance);
   }
 
-  planScenes(input: ScenePlanRequest): Promise<AiCall<ScenePlanSuggestion>> {
-    return this.run({ type: "scenes", input }, () => this.inner.planScenes(input));
+  planScenes(input: ScenePlanRequest, guidance?: SkillGuidance): Promise<AiCall<ScenePlanSuggestion>> {
+    return this.run({ type: "scenes", input }, () => this.inner.planScenes(input, guidance), guidance);
   }
 
-  generateVisualPlans(input: VisualPlanRequest): Promise<AiCall<VisualPlansSuggestion>> {
-    return this.run({ type: "visual", input }, () => this.inner.generateVisualPlans(input));
+  generateVisualPlans(
+    input: VisualPlanRequest,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<VisualPlansSuggestion>> {
+    return this.run(
+      { type: "visual", input },
+      () => this.inner.generateVisualPlans(input, guidance),
+      guidance,
+    );
   }
 
   rankMedia(
@@ -84,13 +97,46 @@ export class GuardedAi implements AiPort {
     return this.run({ type: "rank_media", input }, () => this.inner.rankMedia(input, images));
   }
 
-  rewriteScene(input: SceneRewriteRequest): Promise<AiCall<SceneRewriteSuggestion>> {
-    return this.run({ type: "rewrite_scene", input }, () => this.inner.rewriteScene(input));
+  rewriteScene(
+    input: SceneRewriteRequest,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<SceneRewriteSuggestion>> {
+    return this.run(
+      { type: "rewrite_scene", input },
+      () => this.inner.rewriteScene(input, guidance),
+      guidance,
+    );
   }
 
-  private async run<T>(task: AiTask, call: () => Promise<AiCall<T>>): Promise<AiCall<T>> {
+  generateBriefQuestions(
+    input: BriefQuestionsRequest,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<BriefQuestionsSuggestion>> {
+    return this.run(
+      { type: "brief_questions", input },
+      () => this.inner.generateBriefQuestions(input, guidance),
+      guidance,
+    );
+  }
+
+  generateScriptOutline(
+    input: ScriptOutlineRequest,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<ScriptOutlineSuggestion>> {
+    return this.run(
+      { type: "script_outline", input },
+      () => this.inner.generateScriptOutline(input, guidance),
+      guidance,
+    );
+  }
+
+  private async run<T>(
+    task: AiTask,
+    call: () => Promise<AiCall<T>>,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<T>> {
     // The worst case is the request's max_tokens, so the real cost can never exceed it.
-    const { maxUsd } = await this.inner.estimate(task);
+    const { maxUsd } = await this.inner.estimate(task, guidance);
     return this.guard.guard({
       call: {
         ...this.context,
@@ -130,11 +176,21 @@ export class GuardedTts implements TtsPort {
     return this.inner.listVoices();
   }
 
+  /** Free (the provider's recorded sample); not logged. */
+  voiceSample(voiceId: string): Promise<SynthesizedSpeech | null> {
+    return this.inner.voiceSample(voiceId);
+  }
+
   estimate(text: string, voice: VoiceSettings): TtsEstimate {
     return this.inner.estimate(text, voice);
   }
 
-  synthesize(text: string, voice: VoiceSettings, context?: SpeechContext): Promise<SynthesizedSpeech> {
+  synthesize(
+    text: string,
+    voice: VoiceSettings,
+    language: ContentLanguage,
+    context?: SpeechContext,
+  ): Promise<SynthesizedSpeech> {
     // Billed per character, so the estimate is also the real cost; failed requests are not billed.
     const cost = this.inner.estimate(text, voice);
     return this.guard.guard({
@@ -146,7 +202,7 @@ export class GuardedTts implements TtsPort {
         operation: "speech",
         maxUsd: cost.usd,
       },
-      run: () => this.inner.synthesize(text, voice, context),
+      run: () => this.inner.synthesize(text, voice, language, context),
       onResult: () => ({ status: "ok", usd: cost.usd, characters: cost.characters }),
       onError: failure,
     });

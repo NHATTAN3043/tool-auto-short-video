@@ -1,4 +1,5 @@
 import { DomainError } from "../errors";
+import { ContentLanguageSchema, DEFAULT_CONTENT_LANGUAGE, type ContentLanguage } from "../text/language";
 import { ProjectStyleSchema, type CaptionStyle, type Music, type Project, type ProjectStyle } from "./schema";
 
 export interface StylePatch {
@@ -50,4 +51,14 @@ export function updateStyle(project: Project, patch: StylePatch): Project {
     throw new DomainError("INVALID_INPUT", parsed.error.issues.map((issue) => issue.message).join("; "));
   }
   return { ...project, style: parsed.data };
+}
+
+/** The language the narration is written and read in; Vietnamese for projects that never chose. */
+export function projectLanguage(project: Project): ContentLanguage {
+  return project.language ?? DEFAULT_CONTENT_LANGUAGE;
+}
+
+/** Sets the project language. Generated voices in another language become outdated. */
+export function setProjectLanguage(project: Project, language: ContentLanguage): Project {
+  return { ...project, language: ContentLanguageSchema.parse(language) };
 }

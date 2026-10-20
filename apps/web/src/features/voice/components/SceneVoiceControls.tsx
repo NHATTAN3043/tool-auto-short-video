@@ -24,6 +24,7 @@ import {
   sceneVoiceOptionLabel,
   VOICE_STATUS_LABELS,
   voiceAction,
+  voiceButtonBlock,
 } from "../model";
 
 const AUDIO_ACCEPT = ACCEPTED_EXTENSIONS.audio.map((extension) => `.${extension}`).join(",");
@@ -75,6 +76,7 @@ export function SceneVoiceControls({
   jobs,
   generationEnabled,
   picker,
+  startVoice = null,
 }: {
   project: Project;
   scene: Scene;
@@ -82,6 +84,11 @@ export function SceneVoiceControls({
   /** False without TTS or with the voiceGeneration toggle off: only the existing voice is shown. */
   generationEnabled: boolean;
   picker?: SceneVoicePicker;
+  /**
+   * Gives a project without voice settings its default voice (saved) before the first run, like Full AI
+   * does. Null while the voice list is loading or when the account has no voice.
+   */
+  startVoice?: (() => Promise<void>) | null;
 }) {
   const selectId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -95,6 +102,7 @@ export function SceneVoiceControls({
   const generating = jobCoversScene(jobs.job, scene.id);
   const muted = voice !== undefined && activeVoiceTrack(project) === "project";
   const uploading = uploads.progress !== null;
+  const blocked = voiceButtonBlock(project.voice !== undefined, startVoice !== null);
 
   return (
     <div className="flex flex-col gap-2 rounded-md border border-dashed p-3">
@@ -111,10 +119,13 @@ export function SceneVoiceControls({
             variant="outline"
             size="sm"
             className="ml-auto"
-            disabled={generating || jobs.busy || project.voice === undefined}
-            title={project.voice === undefined ? "Chọn giọng đọc ở mục Giọng đọc AI trước" : undefined}
+            disabled={generating || jobs.busy || blocked !== null}
+            title={blocked ?? undefined}
             onClick={() => {
-              void jobs.prepare([scene.id], { regenerate: action.regenerate });
+              void jobs.prepare([scene.id], {
+                regenerate: action.regenerate,
+                ...(project.voice === undefined && startVoice !== null && { before: startVoice }),
+              });
             }}
           >
             <MicIcon />
@@ -174,6 +185,11 @@ export function SceneVoiceControls({
             </Button>
           ) : null}
         </div>
+      ) : null}
+      {jobs.error && jobs.errorScenes?.includes(scene.id) === true ? (
+        <p role="alert" className="text-sm text-destructive">
+          {jobs.error}
+        </p>
       ) : null}
       {uploads.error ? (
         <p role="alert" className="text-sm text-destructive">

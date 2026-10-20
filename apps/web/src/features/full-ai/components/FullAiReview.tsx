@@ -1,6 +1,14 @@
 "use client";
 
-import { formatUsd, type FullAiResult, type MediaAsset, type Project, type RenderJob } from "@studio/domain";
+import {
+  formatUsd,
+  projectLanguage,
+  type FullAiResult,
+  type MediaAsset,
+  type Project,
+  type RenderJob,
+  type SkillSummary,
+} from "@studio/domain";
 import { ArrowLeftIcon, CheckIcon, XIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
@@ -9,12 +17,19 @@ import { AiConfirmDialog, useAiTask } from "@/features/ai";
 import { SceneMediaSearch } from "@/features/media-search";
 import { SaveIndicator } from "@/features/scenes/components/SaveIndicator";
 import { useProjectEditor } from "@/features/scenes/hooks/use-project-editor";
-import { SceneVoiceControls, useVoiceJobs, VoiceConfirmDialog } from "@/features/voice";
+import {
+  SceneVoiceControls,
+  useVoiceCatalog,
+  useVoiceJobs,
+  VoiceConfirmDialog,
+  voiceStarter,
+} from "@/features/voice";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
 
-import { alternativesFor, reviewStats } from "../model";
+import { alternativesFor, rememberedSkill, reviewStats } from "../model";
 import { ReviewSceneCard } from "./ReviewSceneCard";
+import { SkillPicker } from "./SkillPicker";
 
 /**
  * The review screen after a Full AI run. Every scene can be kept, given another media, rewritten (as a
@@ -25,19 +40,27 @@ export function FullAiReview({
   latest,
   ttsAvailable,
   aiAvailable,
+  skills,
 }: {
   project: Project;
   latest: { job: RenderJob; result: FullAiResult | null } | null;
   ttsAvailable: boolean;
   aiAvailable: boolean;
+  /** Installed skills; a rewrite can send one along (ADR 0012). */
+  skills: readonly SkillSummary[];
 }) {
   const editor = useProjectEditor(initial);
   const { project } = editor;
   const voiceEnabled = ttsAvailable && project.automationSettings.voiceGeneration;
   const voiceJobs = useVoiceJobs(project.id, voiceEnabled, editor.flushSave, editor.voicesGenerated);
+  // Only needed to give a project without voice settings its default voice.
+  const voiceCatalog = useVoiceCatalog(voiceEnabled && project.voice === undefined);
+  const startVoice = voiceStarter(voiceCatalog.catalog, editor.saveVoiceSettings);
   const rewrite = useAiTask(project.id);
   const [rewriting, setRewriting] = useState<string | null>(null);
   const canRewrite = aiAvailable && project.automationSettings.scriptGeneration;
+  // Shared with the Full AI panel: the skill of the run is preselected for its rewrites.
+  const rewriteSkill = rememberedSkill(project, skills);
   const rankingEnabled = aiAvailable && project.automationSettings.mediaRanking;
   const result = latest?.result ?? null;
   const stats = reviewStats(project);
@@ -96,6 +119,17 @@ export function FullAiReview({
             </ul>
           </CardContent>
         ) : null}
+        {canRewrite && skills.length > 0 ? (
+          <CardContent>
+            <SkillPicker
+              label="Skill khi viết lại cảnh"
+              skills={skills}
+              language={projectLanguage(editor.project)}
+              value={rewriteSkill}
+              onChange={editor.setAiSkill}
+            />
+          </CardContent>
+        ) : null}
         {latest === null ? (
           <CardContent>
             <p className="text-sm text-muted-foreground">
@@ -141,6 +175,7 @@ export function FullAiReview({
                         script: project.script,
                         narration: target.narration,
                         ...(trimmed !== "" && { instruction: trimmed }),
+                        ...(rewriteSkill !== undefined && { skillId: rewriteSkill }),
                       },
                     });
                   }
@@ -191,6 +226,7 @@ export function FullAiReview({
                 scene={scene}
                 jobs={voiceJobs}
                 generationEnabled={voiceEnabled}
+                startVoice={startVoice}
               />
             }
             mediaSearch={
@@ -198,6 +234,13 @@ export function FullAiReview({
                 projectId={project.id}
                 sceneLabel={`Cảnh ${String(index + 1)}`}
                 visualPlan={scene.visualPlan}
+                narration={scene.narration}
+                language={projectLanguage(project)}
+                keywordSuggest={
+                  aiAvailable
+                    ? { sceneId: scene.id, script: project.script, onApply: editor.applyVisualPlans }
+                    : null
+                }
                 onPicked={(asset) => {
                   pickMedia(scene.id, asset);
                 }}

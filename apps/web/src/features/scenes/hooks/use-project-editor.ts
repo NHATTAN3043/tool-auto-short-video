@@ -4,6 +4,8 @@ import {
   computeTimeline,
   type MediaAsset,
   type MediaRankingMode,
+  type ContentLanguage,
+  type SkillId,
   type Music,
   type Project,
   type ScenePlanSuggestion,
@@ -87,6 +89,19 @@ export function useProjectEditor(initial: Project) {
     [],
   );
 
+  /**
+   * Sets voice settings the project does not have yet and saves right away, so a voice run that follows
+   * reads them from the server. Rejects when the save fails.
+   */
+  const saveVoiceSettings = useCallback(
+    (settings: VoiceSettings) =>
+      new Promise<void>((resolve, reject) => {
+        flushWaiters.current.push({ resolve, reject });
+        dispatch({ type: "setVoiceSettings", settings });
+      }),
+    [],
+  );
+
   /** Resolves once everything edited so far is saved on the server; rejects when saving fails. */
   const flushSave = useCallback(async () => {
     if (!(await saver.flush())) throw new Error("Không lưu được. Vui lòng thử lại.");
@@ -102,6 +117,7 @@ export function useProjectEditor(initial: Project) {
       void saver.flush();
     },
     saveSettings,
+    saveVoiceSettings,
     flushSave,
     setScript: (script: string) => {
       dispatch({ type: "setScript", script });
@@ -131,6 +147,12 @@ export function useProjectEditor(initial: Project) {
     },
     setMediaRankingMode: (mode: MediaRankingMode) => {
       dispatch({ type: "setMediaRankingMode", mode });
+    },
+    setAiSkill: (skillId: SkillId | undefined) => {
+      dispatch({ type: "setAiSkill", skillId });
+    },
+    setLanguage: (language: ContentLanguage) => {
+      dispatch({ type: "setLanguage", language });
     },
     setDuration: (sceneId: string, durationMs: number | null) => {
       dispatch({ type: "setDuration", sceneId, durationMs });

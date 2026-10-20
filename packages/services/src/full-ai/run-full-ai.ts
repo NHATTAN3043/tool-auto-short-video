@@ -1,6 +1,7 @@
 import {
   AI_RANK_MAX_CANDIDATES,
   AI_RANK_MAX_SCENES,
+  applyFullAiOutline,
   applyScenePlan,
   applyVisualPlans,
   assignMedia,
@@ -17,10 +18,15 @@ import {
   normalizeScriptSuggestion,
   normalizeVisualPlans,
   orderByRanking,
+  projectLanguage,
   scriptToScenes,
+  setAiSkill,
+  setMediaRankingMode,
+  setProjectLanguage,
   setVoiceSettings,
   setVoiceTrack,
   toRankCandidate,
+  type ContentLanguage,
   type FullAiResult,
   type FullAiStep,
   type MediaAsset,
@@ -29,14 +35,17 @@ import {
   type MediaSearchQuery,
   type Project,
   type RenderJob,
+  type SkillGuidance,
 } from "@studio/domain";
 
 import type { MediaSearchResult } from "../media-search/search-media";
 import type { ImportCandidateInput } from "../media-search/import-candidate";
+import { fullAiDraftKey } from "./draft";
 import { AiCallError, type AiPort } from "../ports/ai";
 import type { Clock } from "../ports/clock";
 import type { PaidPortFactory } from "../ports/cost-guard";
 import type { ProjectRepository } from "../ports/project-repository";
+import type { SkillCatalogPort } from "../ports/skill-catalog";
 import type { StoragePort } from "../ports/storage";
 import type { TtsPort } from "../ports/tts";
 import type { ResolveRankImages } from "../ai/rank-images";
@@ -51,6 +60,8 @@ export interface RunFullAiDeps {
   searchMedia: (input: { projectId: string; query: MediaSearchQuery }) => Promise<MediaSearchResult>;
   importCandidate: (input: ImportCandidateInput) => Promise<{ project: Project; asset: MediaAsset }>;
   rankImages: ResolveRankImages;
+  /** Installed skills (ADR 0012); without it a requested skill is skipped with a warning. */
+  skills?: SkillCatalogPort;
   /** Null without a TTS provider; the voice step then only warns. */
   voices: {
     tts: TtsPort;
@@ -125,23 +136,52 @@ export function makeRunFullAi(deps: RunFullAiDeps) {
     const sceneLabel = (project: Project, sceneId: string) =>
       `Cảnh ${String(project.scenes.findIndex((scene) => scene.id === sceneId) + 1)}`;
 
+    /** The narration language of this run, set before the first step (ADR 0013). */
+    let language: ContentLanguage = "vi";
+
+    /** Read once per run; a skill removed since the request is skipped, the run goes on without it. */
+    let guidance: SkillGuidance | undefined;
+    const withSkill = <T extends object>(task: T): T =>
+      guidance === undefined ? task : { ...task, skillId: guidance.id };
+
+    async function loadSkill(skillId: string | undefined): Promise<void> {
+      if (skillId === undefined) return;
+      try {
+        guidance = (await deps.skills?.get(skillId, language)) ?? undefined;
+      } catch {
+        guidance = undefined;
+      }
+      if (guidance === undefined) warn(`Không đọc được skill "${skillId}", đã chạy không dùng skill`);
+    }
+
     async function writeScript(): Promise<void> {
       const { data } = await paid(() =>
-        ai.generateScript({
-          idea: request.idea ?? "",
-          targetDurationSec: request.targetDurationSec,
-          ...(request.tone !== undefined && { tone: request.tone }),
-        }),
+        ai.generateScript(
+          withSkill({
+            idea: request.idea ?? "",
+            targetDurationSec: request.targetDurationSec,
+            ...(request.tone !== undefined && { tone: request.tone }),
+            language,
+          }),
+          guidance,
+        ),
       );
-      const { script } = normalizeScriptSuggestion(data);
+      const { script } = normalizeScriptSuggestion(data, language);
       await update((project) => ({ ...project, script }));
     }
 
     async function makeScenes(): Promise<void> {
       const project = await deps.repo.get(projectId);
-      if (project.automationSettings.scenePlanning) {
+      const { outline } = request;
+      if (outline) {
+        // Approved word for word by the user (ADR 0015): no AI call.
+        await update((stored) => applyFullAiOutline(stored, outline));
+      } else if (project.automationSettings.scenePlanning) {
         const { data } = await paid(() =>
-          ai.planScenes({ script: project.script, maxWordsPerScene: DEFAULT_MAX_WORDS_PER_SCENE }),
+          ai.planScenes(
+            withSkill({ script: project.script, maxWordsPerScene: DEFAULT_MAX_WORDS_PER_SCENE, language }),
+            guidance,
+          ),
         );
         const plan = normalizeScenePlan(data);
         await update((stored) => applyScenePlan(stored, plan));
@@ -155,11 +195,15 @@ export function makeRunFullAi(deps: RunFullAiDeps) {
 
     async function suggestVisuals(): Promise<void> {
       const project = await deps.repo.get(projectId);
+      // After an outline only the added or edited scenes lack a plan; the others keep the approved one.
       const scenes = project.scenes
         .filter((scene) => scene.narration.trim() !== "")
+        .filter((scene) => request.outline === undefined || scene.visualPlan === undefined)
         .map((scene) => ({ id: scene.id, narration: scene.narration }));
       if (scenes.length === 0) return;
-      const { data } = await paid(() => ai.generateVisualPlans({ script: project.script, scenes }));
+      const { data } = await paid(() =>
+        ai.generateVisualPlans(withSkill({ script: project.script, scenes }), guidance),
+      );
       const plans = normalizeVisualPlans(
         data,
         scenes.map((scene) => scene.id),
@@ -323,6 +367,15 @@ export function makeRunFullAi(deps: RunFullAiDeps) {
     }
 
     try {
+      // The request's choice becomes the project's, so the voice step and later edits use it too.
+      // The ranking mode and the skill are remembered too, preselected next time and for rewrites.
+      const chosen = request.language;
+      const project = await update((stored) => {
+        const remembered = setAiSkill(setMediaRankingMode(stored, request.rankingMode), request.skillId);
+        return chosen === undefined ? remembered : setProjectLanguage(remembered, chosen);
+      });
+      language = projectLanguage(project);
+      await loadSkill(request.skillId);
       for (const [index, step] of steps.entries()) {
         stepIndex = index;
         current = step;
@@ -351,6 +404,8 @@ export function makeRunFullAi(deps: RunFullAiDeps) {
       `projects/${projectId}/${outputPath}`,
       bytes(new TextEncoder().encode(JSON.stringify(result))),
     );
+    // The draft became this run; a failed run keeps it so the user can try again.
+    await deps.storage.remove(fullAiDraftKey(projectId));
     return { ok: true, outputPath, costUsd, warnings };
   };
 }

@@ -4,14 +4,19 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type {
   AiTask,
   AiUsage,
+  BriefQuestionsRequest,
+  BriefQuestionsSuggestion,
   MediaRankingSuggestion,
   MediaRankRequest,
   ScenePlanRequest,
   ScenePlanSuggestion,
   SceneRewriteRequest,
   SceneRewriteSuggestion,
+  ScriptOutlineRequest,
+  ScriptOutlineSuggestion,
   ScriptRequest,
   ScriptSuggestion,
+  SkillGuidance,
   VisualPlanRequest,
   VisualPlansSuggestion,
 } from "@studio/domain";
@@ -19,7 +24,13 @@ import { AiCallError, type AiCall, type AiEstimate, type AiPort, type RankImage 
 import type { z } from "zod";
 
 import {
+  BriefQuestionsOutputSchema,
+  briefQuestionsPrompt,
   candidateLabel,
+  languageReminder,
+  narrationLanguage,
+  OutlineOutputSchema,
+  outlinePrompt,
   RANK_INTRO,
   rankPrompt,
   RankOutputSchema,
@@ -30,7 +41,7 @@ import {
   ScenesOutputSchema,
   scriptPrompt,
   ScriptOutputSchema,
-  SYSTEM_PROMPT,
+  systemPrompt,
   toVisualPlan,
   visualPrompt,
   VisualOutputSchema,
@@ -90,6 +101,16 @@ export function outputBudget(task: AiTask): { max: number; expected: number } {
       const expected = approxTokens(task.input.narration) * 2 + 600;
       return { max: Math.max(2000, expected * 2), expected };
     }
+    case "brief_questions":
+      // Five short questions with a few options each, plus room for thinking.
+      return { max: 3000, expected: 900 };
+    case "script_outline": {
+      // Like a script and its scene plan in one answer.
+      const words = task.input.targetDurationSec * 2.6;
+      const scenes = Math.ceil(words / 18);
+      const expected = Math.round(words * 2 + scenes * 150 + 900);
+      return { max: Math.min(32_000, Math.max(6000, expected * 2)), expected };
+    }
   }
 }
 
@@ -122,7 +143,17 @@ function rankContent(input: MediaRankRequest, images: ReadonlyMap<string, RankIm
   return blocks;
 }
 
-function userPrompt(task: AiTask): string {
+function userPrompt(task: AiTask, guidance?: SkillGuidance): string {
+  const prompt = taskPrompt(task);
+  // Ranking writes no narration; the questions are for the user, always in Vietnamese.
+  if (task.type === "rank_media" || task.type === "brief_questions") return prompt;
+  // With a skill the request ends on the language rule, after the English notes in the system prompt.
+  // English narration always gets it: the Vietnamese instructions would otherwise pull the model along.
+  const language = narrationLanguage(task);
+  return guidance === undefined && language === "vi" ? prompt : `${prompt}\n\n${languageReminder(language)}`;
+}
+
+function taskPrompt(task: AiTask): string {
   switch (task.type) {
     case "script":
       return scriptPrompt(task.input);
@@ -134,6 +165,10 @@ function userPrompt(task: AiTask): string {
       return rankPrompt(task.input);
     case "rewrite_scene":
       return rewritePrompt(task.input);
+    case "brief_questions":
+      return briefQuestionsPrompt(task.input);
+    case "script_outline":
+      return outlinePrompt(task.input);
   }
 }
 
@@ -177,21 +212,22 @@ export class ClaudeAi implements AiPort {
     return (inputTokens * this.price.input + outputTokens * this.price.output) / 1_000_000;
   }
 
-  async estimate(task: AiTask): Promise<AiEstimate> {
-    const content = userPrompt(task);
+  async estimate(task: AiTask, guidance?: SkillGuidance): Promise<AiEstimate> {
+    const content = userPrompt(task, guidance);
+    const system = systemPrompt(task, guidance);
     let inputTokens: number;
     try {
       const counted = await this.withRetry(() =>
         this.client.messages.countTokens({
           model: this.model,
-          system: SYSTEM_PROMPT,
+          system,
           messages: [{ role: "user", content }],
         }),
       );
       inputTokens = counted.input_tokens + FORMAT_OVERHEAD_TOKENS;
     } catch {
       // Counting is only for the estimate; fall back to the length heuristic instead of blocking the user.
-      inputTokens = approxTokens(SYSTEM_PROMPT + content) + FORMAT_OVERHEAD_TOKENS;
+      inputTokens = approxTokens(system + content) + FORMAT_OVERHEAD_TOKENS;
     }
     // Images are counted apart: the text is counted for free, the thumbnails are not fetched for it.
     const images = imageCount(task);
@@ -205,27 +241,40 @@ export class ClaudeAi implements AiPort {
     };
   }
 
-  async generateScript(input: ScriptRequest): Promise<AiCall<ScriptSuggestion>> {
-    return this.run({ type: "script", input }, ScriptOutputSchema, (data) => data);
+  async generateScript(input: ScriptRequest, guidance?: SkillGuidance): Promise<AiCall<ScriptSuggestion>> {
+    return this.run({ type: "script", input }, ScriptOutputSchema, (data) => data, { guidance });
   }
 
-  async planScenes(input: ScenePlanRequest): Promise<AiCall<ScenePlanSuggestion>> {
-    return this.run({ type: "scenes", input }, ScenesOutputSchema, (data) => ({
-      scenes: data.scenes.map(({ narration, ...fields }) => ({
-        narration,
-        visualPlan: toVisualPlan(fields),
-      })),
-    }));
-  }
-
-  async generateVisualPlans(input: VisualPlanRequest): Promise<AiCall<VisualPlansSuggestion>> {
-    return this.run({ type: "visual", input }, VisualOutputSchema, (data) => ({
-      // The model numbers scenes from 1; unknown numbers are dropped here, the domain checks the rest.
-      plans: data.plans.flatMap(({ sceneNumber, ...fields }) => {
-        const scene = input.scenes[sceneNumber - 1];
-        return scene ? [{ sceneId: scene.id, visualPlan: toVisualPlan(fields) }] : [];
+  async planScenes(input: ScenePlanRequest, guidance?: SkillGuidance): Promise<AiCall<ScenePlanSuggestion>> {
+    return this.run(
+      { type: "scenes", input },
+      ScenesOutputSchema,
+      (data) => ({
+        scenes: data.scenes.map(({ narration, ...fields }) => ({
+          narration,
+          visualPlan: toVisualPlan(fields),
+        })),
       }),
-    }));
+      { guidance },
+    );
+  }
+
+  async generateVisualPlans(
+    input: VisualPlanRequest,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<VisualPlansSuggestion>> {
+    return this.run(
+      { type: "visual", input },
+      VisualOutputSchema,
+      (data) => ({
+        // The model numbers scenes from 1; unknown numbers are dropped here, the domain checks the rest.
+        plans: data.plans.flatMap(({ sceneNumber, ...fields }) => {
+          const scene = input.scenes[sceneNumber - 1];
+          return scene ? [{ sceneId: scene.id, visualPlan: toVisualPlan(fields) }] : [];
+        }),
+      }),
+      { guidance },
+    );
   }
 
   async rankMedia(
@@ -248,19 +297,58 @@ export class ClaudeAi implements AiPort {
           return [{ sceneId: scene.sceneId, keys }];
         }),
       }),
-      content,
+      { content },
     );
   }
 
-  async rewriteScene(input: SceneRewriteRequest): Promise<AiCall<SceneRewriteSuggestion>> {
-    return this.run({ type: "rewrite_scene", input }, RewriteOutputSchema, (data) => data);
+  async rewriteScene(
+    input: SceneRewriteRequest,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<SceneRewriteSuggestion>> {
+    return this.run({ type: "rewrite_scene", input }, RewriteOutputSchema, (data) => data, { guidance });
+  }
+
+  async generateBriefQuestions(
+    input: BriefQuestionsRequest,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<BriefQuestionsSuggestion>> {
+    return this.run(
+      { type: "brief_questions", input },
+      BriefQuestionsOutputSchema,
+      // Ids are given here, the domain renumbers them after cleaning.
+      (data) => ({
+        questions: data.questions.map((question, index) => ({ id: `q${String(index + 1)}`, ...question })),
+      }),
+      { guidance },
+    );
+  }
+
+  async generateScriptOutline(
+    input: ScriptOutlineRequest,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<ScriptOutlineSuggestion>> {
+    return this.run(
+      { type: "script_outline", input },
+      OutlineOutputSchema,
+      (data) => ({
+        title: data.title,
+        scenes: data.scenes.map(({ narration, ...fields }) => ({
+          narration,
+          visualPlan: toVisualPlan(fields),
+        })),
+      }),
+      { guidance },
+    );
   }
 
   private async run<S extends z.ZodType, T>(
     task: AiTask,
     schema: S,
     map: (data: z.infer<S>) => T,
-    content: UserContent = userPrompt(task),
+    {
+      guidance,
+      content = userPrompt(task, guidance),
+    }: { guidance?: SkillGuidance; content?: UserContent } = {},
   ): Promise<AiCall<T>> {
     const format = zodOutputFormat(schema);
     let response: Anthropic.Message;
@@ -269,7 +357,7 @@ export class ClaudeAi implements AiPort {
         this.client.messages.create({
           model: this.model,
           max_tokens: outputBudget(task).max,
-          system: SYSTEM_PROMPT,
+          system: systemPrompt(task, guidance),
           messages: [{ role: "user", content }],
           output_config: {
             format: { type: "json_schema", schema: format.schema },

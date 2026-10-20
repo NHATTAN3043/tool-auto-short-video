@@ -9,6 +9,7 @@ export {
   FakeMediaSearch,
   FakeRemoteFiles,
   FakeRenderer,
+  FakeSkillCatalog,
   FakeTts,
   InMemoryApiUsageLog,
   InMemoryBudgetSettings,

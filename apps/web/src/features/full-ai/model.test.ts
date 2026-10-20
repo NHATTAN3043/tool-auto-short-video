@@ -1,25 +1,41 @@
 import {
   createProject,
   MODE_PRESETS,
+  setDraftOutline,
+  setDraftQuestions,
+  toggleDraftChoice,
   type FullAiResult,
   type MediaCandidate,
   type Project,
   type RenderJob,
+  type SkillSummary,
 } from "@studio/domain";
 import { describe, expect, it } from "vitest";
 
 import type { FullAiEstimate } from "./api";
 import {
   alternativesFor,
+  approveRequest,
+  briefTask,
   costLines,
-  formError,
-  initialForm,
+  ideaError,
+  initialDraft,
   isRunning,
+  outlineSceneLabel,
+  outlineTask,
   progressLine,
+  quickRequest,
+  rememberedSkill,
   reviewStats,
+  rewriteTask,
+  runUsesSkill,
+  skillHint,
   stepsLine,
-  toRequest,
+  withInstalledSkill,
 } from "./model";
+
+const hooks: SkillSummary = { id: "viral-hooks", name: "viral-hooks", description: "Hooks", language: "en" };
+const tiktok: SkillSummary = { id: "viral-tiktok", name: "viral-tiktok", description: "", language: "vi" };
 
 const base = (): Project => ({
   ...createProject({ name: "P", mode: "full_ai" }, { newId: () => "prj_1" }),
@@ -41,29 +57,115 @@ const job = (extra: Partial<RenderJob>): RenderJob => ({
   ...extra,
 });
 
-describe("Full AI form", () => {
-  it("starts from the remembered ranking mode", () => {
-    expect(initialForm(base()).rankingMode).toBe("text");
-    expect(initialForm({ ...base(), mediaRankingMode: "vision" }).rankingMode).toBe("vision");
+const NOW = "2026-10-20T00:00:00.000Z";
+const plan = { intent: "Mèo", preferredMedia: "video" as const, searchQueries: ["cat"] };
+
+describe("Full AI draft", () => {
+  it("starts from the remembered ranking mode and skill, while the skill is installed", () => {
+    expect(initialDraft(base(), [], NOW).rankingMode).toBe("text");
+    const project = { ...base(), mediaRankingMode: "vision" as const, aiSkillId: "viral-hooks" };
+    expect(initialDraft(project, [hooks, tiktok], NOW)).toMatchObject({
+      rankingMode: "vision",
+      skillId: "viral-hooks",
+    });
+    expect(initialDraft(project, [tiktok], NOW).skillId).toBeUndefined();
+    expect(rememberedSkill(base(), [hooks])).toBeUndefined();
+    const saved = { ...initialDraft(base(), [], NOW), skillId: "viral-hooks" };
+    expect(withInstalledSkill(saved, [tiktok]).skillId).toBeUndefined();
+    expect(withInstalledSkill(saved, [hooks])).toBe(saved);
   });
 
   it("needs an idea when AI writes the script, otherwise the project's script", () => {
-    const form = { ...initialForm(base()), idea: "ab" };
-    expect(formError(form, ["script", "scenes"], base())).toContain("ý tưởng");
-    expect(formError({ ...form, idea: "Mèo đi học" }, ["script", "scenes"], base())).toBeNull();
-    expect(formError(form, ["scenes"], base())).toContain("Viết script trước");
-    expect(formError(form, ["scenes"], { ...base(), script: "Có script." })).toBeNull();
+    const draft = { ...initialDraft(base(), [], NOW), idea: "ab" };
+    expect(ideaError(draft, base())).toContain("ý tưởng");
+    expect(ideaError({ ...draft, idea: "Mèo đi học" }, base())).toBeNull();
+    const noScript = { ...base(), automationSettings: { ...MODE_PRESETS.assisted, scriptGeneration: false } };
+    expect(ideaError(draft, noScript)).toContain("Viết script trước");
+    expect(ideaError(draft, { ...noScript, script: "Có script." })).toBeNull();
   });
 
-  it("builds the request without empty optional fields", () => {
-    expect(
-      toRequest({ idea: " Mèo ", targetDurationSec: 45, tone: " ", rankingMode: "vision" }, true),
-    ).toEqual({
-      idea: "Mèo",
-      targetDurationSec: 45,
-      rankingMode: "vision",
-      replaceScenes: true,
+  it("asks the questions, then writes the outline from the answers or a remark", () => {
+    const draft = { ...initialDraft(base(), [hooks], NOW), idea: " Mèo ", tone: " ", skillId: "viral-hooks" };
+    expect(briefTask(draft, "en")).toEqual({
+      type: "brief_questions",
+      input: { idea: "Mèo", targetDurationSec: 30, skillId: "viral-hooks", language: "en" },
     });
+    const asked = toggleDraftChoice(
+      setDraftQuestions(
+        draft,
+        { questions: [{ id: "q1", text: "Cho ai?", kind: "single", options: ["Trẻ em"] }] },
+        "k",
+      ),
+      "q1",
+      0,
+    );
+    expect(outlineTask(asked, "vi")).toMatchObject({
+      type: "script_outline",
+      input: { answers: [{ question: "Cho ai?", answer: "Trẻ em" }] },
+    });
+    const outlined = setDraftOutline(asked, {
+      title: "Mèo",
+      scenes: [{ narration: "Câu một.", visualPlan: plan }],
+    });
+    expect(outlineTask(outlined, "vi", " ngắn hơn ")).toMatchObject({
+      input: { revision: { feedback: "ngắn hơn", scenes: ["Câu một."] } },
+    });
+    const plain = outlineTask(outlined, "vi", "  ");
+    expect(plain.type === "script_outline" ? plain.input.revision : "missing").toBeUndefined();
+    const sceneId = outlined.outline?.scenes[0]?.id ?? "";
+    expect(rewriteTask(outlined, sceneId, "vi")).toMatchObject({
+      type: "rewrite_scene",
+      input: { script: "Câu một.", narration: "Câu một.", skillId: "viral-hooks" },
+    });
+    expect(rewriteTask(outlined, "nope", "vi")).toBeNull();
+  });
+
+  it("sends the approved outline, or the old run when the questions are skipped", () => {
+    const draft = setDraftOutline(
+      { ...initialDraft(base(), [], NOW), idea: "Mèo" },
+      { title: "Mèo", scenes: [{ narration: "Câu một.", visualPlan: plan }] },
+    );
+    expect(approveRequest(draft, "vi")).toEqual({
+      idea: "Mèo",
+      targetDurationSec: 30,
+      rankingMode: "text",
+      language: "vi",
+      outline: { title: "Mèo", scenes: [{ narration: "Câu một.", visualPlan: plan }] },
+      replaceScenes: false,
+    });
+    expect(approveRequest({ ...draft, outline: { title: "", scenes: [] } }, "vi")).toBeNull();
+    // No step of this run sends the skill: it stays out of the request.
+    const splitOnly = { ...base(), automationSettings: { ...MODE_PRESETS.full_ai, scenePlanning: false } };
+    const quick = quickRequest({ ...draft, skillId: "viral-hooks" }, splitOnly, ["scenes", "media"], "en");
+    expect(quick).toEqual({
+      idea: "Mèo",
+      targetDurationSec: 30,
+      rankingMode: "text",
+      language: "en",
+      replaceScenes: false,
+    });
+  });
+
+  it("names the scenes of an outline", () => {
+    expect([0, 1, 2, 3].map((index) => outlineSceneLabel(index, 4))).toEqual(["Mở đầu", "Ý 1", "Ý 2", "Kết"]);
+    expect([0, 1].map((index) => outlineSceneLabel(index, 2))).toEqual(["Mở đầu", "Ý 1"]);
+  });
+});
+
+describe("Full AI skill", () => {
+  it("is offered only when a step sends it: script, AI scene planning or keywords", () => {
+    const settings = MODE_PRESETS.full_ai;
+    expect(runUsesSkill(["script", "scenes"], settings)).toBe(true);
+    expect(runUsesSkill(["scenes", "visual"], { ...settings, scenePlanning: false })).toBe(true);
+    expect(runUsesSkill(["scenes", "media"], { ...settings, scenePlanning: true })).toBe(true);
+    expect(runUsesSkill(["scenes", "media"], { ...settings, scenePlanning: false })).toBe(false);
+  });
+
+  it("warns that English skills are still held to Vietnamese", () => {
+    expect(skillHint(undefined)).toBe("Không gửi kèm skill.");
+    expect(skillHint(hooks)).toContain("tiếng Việt");
+    expect(skillHint(tiktok)).toContain("SKILL.vi.md");
+    expect(skillHint(tiktok, "en")).toContain("không phải tiếng Anh");
   });
 });
 

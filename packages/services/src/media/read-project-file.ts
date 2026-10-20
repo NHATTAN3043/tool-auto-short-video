@@ -2,6 +2,7 @@ import { contentTypeForFileName, DomainError, parseByteRange } from "@studio/dom
 
 import type { ProjectRepository } from "../ports/project-repository";
 import type { StoragePort } from "../ports/storage";
+import { VOICE_PREVIEW_FOLDER } from "../voice/preview-voice";
 
 export interface ReadProjectFileInput {
   projectId: string;
@@ -27,7 +28,7 @@ export type ReadProjectFileResult =
   | { status: 416; size: number };
 
 /** Only these project sub-folders are served; project.json and anything else stay private. */
-export const SERVED_FOLDERS: readonly string[] = ["media", "thumbnails", "render"];
+export const SERVED_FOLDERS: readonly string[] = ["media", "thumbnails", "render", VOICE_PREVIEW_FOLDER];
 
 const UNSAFE_SEGMENT = /[\0\\/:]/u;
 

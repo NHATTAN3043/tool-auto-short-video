@@ -6,6 +6,7 @@ describe("loadEnv", () => {
   it("applies defaults and treats empty values as unset", () => {
     expect(loadEnv({ STUDIO_BROWSER_EXECUTABLE: "", STUDIO_STORAGE_DIR: "" })).toEqual({
       STUDIO_STORAGE_DIR: "./storage",
+      STUDIO_SKILLS_DIR: "./.claude/skills",
       STUDIO_FFMPEG_PATH: "ffmpeg",
       STUDIO_FFPROBE_PATH: "ffprobe",
       STUDIO_MAX_UPLOAD_MB: 1024,
@@ -34,6 +35,7 @@ describe("loadEnv", () => {
       STUDIO_FFMPEG_PATH: "C:/ffmpeg/bin/ffmpeg.exe",
       STUDIO_FFPROBE_PATH: "C:/ffmpeg/bin/ffprobe.exe",
       STUDIO_BROWSER_EXECUTABLE: "/usr/bin/chromium",
+      STUDIO_SKILLS_DIR: "./.claude/skills",
       STUDIO_MAX_UPLOAD_MB: 200,
       ELEVENLABS_DEFAULT_MODEL_ID: "eleven_flash_v2_5",
       ELEVENLABS_USD_PER_CREDIT: 0.0006,
