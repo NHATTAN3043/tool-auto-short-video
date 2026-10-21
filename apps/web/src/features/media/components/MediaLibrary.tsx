@@ -66,6 +66,11 @@ export function MediaLibrary({
         <CardDescription>
           Video (mp4, mov, webm), ảnh (jpg, png, webp) và âm thanh (mp3, wav, m4a). File gốc được giữ nguyên.
         </CardDescription>
+        <CardDescription>
+          Đặt tên file theo nội dung để Full AI và ô tìm media tìm thấy: các tag cách nhau bằng{" "}
+          <code>__</code>, các từ trong tag cách nhau bằng <code>-</code>, nên có tag tiếng Anh. Ví dụ{" "}
+          <code>cat-sleeping__orange-cat__sofa.mp4</code>.
+        </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div

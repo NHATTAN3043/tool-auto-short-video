@@ -111,25 +111,30 @@ export function normalizeVisualPlans(
 
 /**
  * A full order of every candidate for each requested scene: the AI's order first (unknown and repeated
- * keys dropped), then the candidates it left out, in their original order.
+ * keys dropped), then the candidates it left out, in their original order, then the ones it rejected as
+ * not fitting the scene (unknown rejected keys dropped).
  */
 export function normalizeMediaRanking(
   suggestion: MediaRankingSuggestion,
   request: MediaRankRequest,
 ): MediaRankingSuggestion {
-  const ranked = new Map<string, readonly string[]>();
+  const ranked = new Map<string, MediaRankingSuggestion["scenes"][number]>();
   for (const scene of suggestion.scenes) {
-    if (!ranked.has(scene.sceneId)) ranked.set(scene.sceneId, scene.keys);
+    if (!ranked.has(scene.sceneId)) ranked.set(scene.sceneId, scene);
   }
   return {
     scenes: request.scenes.map((scene) => {
       const known = scene.candidates.map((candidate) => candidate.key);
-      const allowed = new Set(known);
+      const answer = ranked.get(scene.sceneId);
+      const rejected = known.filter((key) => answer?.rejected?.includes(key) === true);
+      const allowed = new Set(known.filter((key) => !rejected.includes(key)));
       const keys: string[] = [];
-      for (const key of [...(ranked.get(scene.sceneId) ?? []), ...known]) {
+      for (const key of [...(answer?.keys ?? []), ...known]) {
         if (allowed.delete(key)) keys.push(key);
       }
-      return { sceneId: scene.sceneId, keys };
+      return rejected.length === 0
+        ? { sceneId: scene.sceneId, keys }
+        : { sceneId: scene.sceneId, keys: [...keys, ...rejected], rejected };
     }),
   };
 }

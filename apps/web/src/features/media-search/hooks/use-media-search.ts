@@ -10,7 +10,7 @@ import type {
 import { useCallback, useState } from "react";
 
 import { importCandidate, searchMedia, type MediaSearchResult } from "../api";
-import { initialSearch, queryForLanguage, type KeywordGroup } from "../model";
+import { ALL_SOURCES, initialSearch, queryForLanguage, type KeywordGroup } from "../model";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : "Đã có lỗi xảy ra.");
 
@@ -49,7 +49,7 @@ export function useMediaSearch(
             query: q,
             kind,
             lang: l,
-            sources: source === "all" ? ["library", "pexels", "pixabay"] : [source],
+            sources: source === "all" ? ALL_SOURCES : [source],
           }),
         );
       } catch (cause) {

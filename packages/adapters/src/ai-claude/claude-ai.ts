@@ -287,14 +287,17 @@ export class ClaudeAi implements AiPort {
       RankOutputSchema,
       (data) => ({
         // Numbers from 1 back to ids and keys; unknown numbers are dropped, the domain fills the rest.
-        scenes: data.scenes.flatMap(({ sceneNumber, ranking }) => {
+        scenes: data.scenes.flatMap(({ sceneNumber, ranking, rejected }) => {
           const scene = input.scenes[sceneNumber - 1];
           if (!scene) return [];
-          const keys = ranking.flatMap((number) => {
-            const candidate = scene.candidates[number - 1];
-            return candidate ? [candidate.key] : [];
-          });
-          return [{ sceneId: scene.sceneId, keys }];
+          const toKeys = (numbers: readonly number[]) =>
+            numbers.flatMap((number) => {
+              const candidate = scene.candidates[number - 1];
+              return candidate ? [candidate.key] : [];
+            });
+          const keys = toKeys(ranking);
+          const dropped = toKeys(rejected ?? []);
+          return [{ sceneId: scene.sceneId, keys, ...(dropped.length > 0 && { rejected: dropped }) }];
         }),
       }),
       { content },

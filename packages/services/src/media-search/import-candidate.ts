@@ -193,6 +193,13 @@ export function makeImportCandidate(deps: ImportCandidateDeps) {
 
   return async (input: ImportCandidateInput): Promise<{ project: Project; asset: MediaAsset }> => {
     const { candidate } = input;
+    if (candidate.provider === "project") {
+      // Already the project's own file: nothing to download or copy.
+      const project = await deps.repo.get(input.projectId);
+      const asset = project.assets.find((existing) => existing.id === candidate.ref);
+      if (!asset) throw new DomainError("ASSET_NOT_FOUND", `Asset ${candidate.ref} not found`);
+      return { project, asset };
+    }
     if (candidate.provider === "library") {
       return copyToProject(input.projectId, await deps.library.get(candidate.ref));
     }

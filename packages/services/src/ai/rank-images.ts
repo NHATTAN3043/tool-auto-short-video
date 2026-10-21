@@ -3,6 +3,7 @@ import { fileExtension, type MediaRankRequest } from "@studio/domain";
 import type { RankImage } from "../ports/ai";
 import type { MediaLibraryRepository } from "../ports/media-library";
 import type { MediaSearchPort } from "../ports/media-search";
+import type { ProjectRepository } from "../ports/project-repository";
 import type { StoragePort } from "../ports/storage";
 import { libraryMediaKey } from "../media-search/import-candidate";
 
@@ -29,20 +30,32 @@ function toBase64(bytes: Uint8Array): string {
 
 /**
  * The thumbnails of a vision ranking, by candidate key. A stock thumbnail is sent as its link, and only
- * when it is on a provider's media host (the request may come from the browser); a library item is read
- * from storage. Text mode needs no image. A thumbnail that cannot be used is skipped, not an error.
+ * when it is on a provider's media host (the request may come from the browser); a library item or a
+ * project upload is read from storage, found by its id (never by a path from the request). Text mode needs
+ * no image. A thumbnail that cannot be used is skipped, not an error.
  */
 export function makeResolveRankImages(deps: {
   library: MediaLibraryRepository;
+  repo: ProjectRepository;
   storage: StoragePort;
   providers: readonly MediaSearchPort[];
 }): ResolveRankImages {
   async function libraryImage(id: string): Promise<RankImage | null> {
     const item = await deps.library.get(id).catch(() => null);
     const relative = item?.thumbnailPath ?? (item?.kind === "image" ? item.path : undefined);
-    const mediaType = relative === undefined ? undefined : MEDIA_TYPES[fileExtension(relative) ?? ""];
-    if (relative === undefined || mediaType === undefined) return null;
-    const key = libraryMediaKey(relative);
+    return relative === undefined ? null : storedImage(libraryMediaKey(relative));
+  }
+
+  async function projectImage(projectId: string, assetId: string): Promise<RankImage | null> {
+    const project = await deps.repo.get(projectId).catch(() => null);
+    const asset = project?.assets.find((candidate) => candidate.id === assetId);
+    const relative = asset?.thumbnailPath ?? (asset?.kind === "image" ? asset.path : undefined);
+    return relative === undefined ? null : storedImage(`projects/${projectId}/${relative}`);
+  }
+
+  async function storedImage(key: string): Promise<RankImage | null> {
+    const mediaType = MEDIA_TYPES[fileExtension(key) ?? ""];
+    if (mediaType === undefined) return null;
     const size = (await deps.storage.stat(key))?.size;
     if (size === undefined || size > MAX_IMAGE_BYTES) return null;
     const chunks: Uint8Array[] = [];
@@ -76,7 +89,12 @@ export function makeResolveRankImages(deps: {
       for (const candidate of scene.candidates) {
         if (images.has(candidate.key)) continue;
         const link = candidate.thumbnail;
-        const image = link.type === "remote" ? remoteImage(link.url) : await libraryImage(link.id);
+        const image =
+          link.type === "remote"
+            ? remoteImage(link.url)
+            : link.type === "library"
+              ? await libraryImage(link.id)
+              : await projectImage(link.projectId, link.assetId);
         if (image) images.set(candidate.key, image);
       }
     }

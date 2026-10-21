@@ -200,7 +200,7 @@ function failureMessage(action: ContentAction): string {
     case "updateSfx":
       return "Thời điểm hoặc âm lượng hiệu ứng không hợp lệ.";
     case "updateStyle":
-      return "Giá trị cài đặt phụ đề hoặc chuyển cảnh không hợp lệ.";
+      return "Giá trị cài đặt phụ đề, chuyển cảnh hoặc logo không hợp lệ.";
     case "applyScenePlan":
     case "applyVisualPlans":
       return "Gợi ý của AI không còn khớp với dự án, không áp dụng được.";

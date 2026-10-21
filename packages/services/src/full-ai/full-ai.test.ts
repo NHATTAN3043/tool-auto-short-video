@@ -1,4 +1,5 @@
 import {
+  AI_RANK_MAX_CANDIDATES,
   createProject,
   DomainError,
   newFullAiDraft,
@@ -99,7 +100,7 @@ async function setup(options: { settings?: AutomationSettings; project?: Partial
     ai: () => aiFor(),
     searchMedia,
     importCandidate,
-    rankImages: makeResolveRankImages({ library, storage, providers }),
+    rankImages: makeResolveRankImages({ library, repo, storage, providers }),
     skills,
     voices: { tts, generate, defaults: { modelId: "m1" } },
   });
@@ -169,6 +170,56 @@ describe("Full AI", () => {
     expect(result.scenes[0]?.candidates.map((candidate) => candidate.ref)).toEqual(["v3", "v2", "v1"]);
     expect(result.warnings).toEqual([]);
     expect((await s.getLatest("prj_1"))?.result).toEqual(result);
+  });
+
+  it("never picks what the ranking rejects, and leaves a scene empty when nothing fits", async () => {
+    const s = await setup();
+    s.ai.rejectKeys = ["pexels:video:v3", "pexels:image:i1"];
+    const job = await s.request({ projectId: "prj_1", request });
+    await s.run();
+
+    const project = await s.repo.get("prj_1");
+    const files = project.scenes.map(
+      (scene) => project.assets.find((asset) => asset.id === scene.media?.assetId)?.fileName,
+    );
+    expect(files).toEqual(["pexels-v2.mp4", undefined]);
+    const result = await s.getResult({ projectId: "prj_1", jobId: job.id });
+    // Rejected files stay last, so "Đổi media" can still offer them.
+    expect(result.scenes[0]?.candidates.map((candidate) => candidate.ref)).toEqual(["v2", "v1", "v3"]);
+    expect(result.warnings).toEqual(["Cảnh 2: AI thấy không media nào phù hợp, hãy chọn tay"]);
+  });
+
+  it("offers the project's uploads first, but keeps places for stock", async () => {
+    const s = await setup({
+      project: {
+        assets: Array.from({ length: 12 }, (_, i) => ({
+          id: `ast_up${String(i)}`,
+          kind: "video" as const,
+          source: "upload" as const,
+          fileName: `cat__sofa-${String(i)}.mp4`,
+          path: `media/ast_up${String(i)}.mp4`,
+          width: 1080,
+          height: 1920,
+          createdAt: "2026-10-10T00:00:00.000Z",
+        })),
+      },
+    });
+    // Every stock video is rejected: the scene falls back to the best upload left.
+    s.ai.rejectKeys = ["pexels:video:v1", "pexels:video:v2", "pexels:video:v3"];
+    const job = await s.request({ projectId: "prj_1", request });
+    await s.run();
+
+    const result = await s.getResult({ projectId: "prj_1", jobId: job.id });
+    const providers = result.scenes[0]?.candidates.map((candidate) => candidate.provider) ?? [];
+    // Twelve uploads match, yet all three stock videos still get a place; the rest go to uploads.
+    expect(providers).toHaveLength(AI_RANK_MAX_CANDIDATES);
+    expect(providers.filter((provider) => provider === "pexels")).toHaveLength(3);
+    expect(providers.filter((provider) => provider === "project")).toHaveLength(AI_RANK_MAX_CANDIDATES - 3);
+    // The fake ranking reverses the list: the last upload offered wins, used as is without a copy.
+    const project = await s.repo.get("prj_1");
+    expect(project.scenes[0]?.media?.assetId).toBe(`ast_up${String(AI_RANK_MAX_CANDIDATES - 4)}`);
+    // Twelve uploads, the stock image of scene 2 and two voices.
+    expect(project.assets).toHaveLength(12 + 1 + 2);
   });
 
   it("skips the steps whose toggle is off and uses the project's script", async () => {

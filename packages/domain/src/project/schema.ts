@@ -38,11 +38,35 @@ export type CaptionStyle = z.infer<typeof CaptionStyleSchema>;
 export const TransitionSchema = z.enum(["none", "fade"]);
 export type Transition = z.infer<typeof TransitionSchema>;
 
+export const WatermarkCornerSchema = z.enum(["top-left", "top-right", "bottom-left", "bottom-right"]);
+export type WatermarkCorner = z.infer<typeof WatermarkCornerSchema>;
+
+/** The channel logo, drawn as a circle in one corner for the whole video (ADR 0017). */
+export const WatermarkSchema = z.object({
+  enabled: z.boolean(),
+  /** An image asset of the project; the file itself is never changed, the circle is drawn on render. */
+  assetId: z.string().min(1),
+  corner: WatermarkCornerSchema,
+  /** Diameter as a fraction of the frame width. */
+  size: z.number().min(0.05).max(0.25),
+  /** Distance from the left/right edge as a fraction of the frame width. */
+  offsetX: z.number().min(0).max(0.3),
+  /** Distance from the top/bottom edge as a fraction of the frame height. */
+  offsetY: z.number().min(0).max(0.3),
+  opacity: z.number().min(0.2).max(1),
+  /** Ring around the circle in pixels; 0 = no ring. */
+  borderWidth: z.number().int().min(0).max(12),
+  borderColor: z.string().min(1),
+});
+export type Watermark = z.infer<typeof WatermarkSchema>;
+
 export const ProjectStyleSchema = z.object({
   captions: CaptionStyleSchema,
   transition: TransitionSchema,
   transitionMs: z.number().int().nonnegative(),
   background: z.string().min(1),
+  /** Optional so older files stay valid. */
+  watermark: WatermarkSchema.optional(),
 });
 export type ProjectStyle = z.infer<typeof ProjectStyleSchema>;
 

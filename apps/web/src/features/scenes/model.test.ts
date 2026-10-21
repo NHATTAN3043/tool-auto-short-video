@@ -343,6 +343,32 @@ describe("editor reducer: style", () => {
     expect(state.lastError).toMatch(/không hợp lệ/u);
     expect(state.project.style.captions.fontSize).toBeGreaterThan(0);
   });
+
+  it("adds an uploaded logo, moves it and undoes back to no logo", () => {
+    const logo = {
+      id: "ast_logo",
+      kind: "image" as const,
+      source: "upload" as const,
+      fileName: "logo.png",
+      path: "media/ast_logo.png",
+      createdAt: NOW,
+    };
+    const start = createEditorState(project([scene("a", "Một.")]));
+    const state = run(
+      start,
+      { type: "assetAdded", asset: logo },
+      { type: "updateStyle", patch: { watermark: { assetId: "ast_logo", enabled: true } } },
+      { type: "commitTyping" },
+      { type: "updateStyle", patch: { watermark: { corner: "top-right" } } },
+      { type: "commitTyping" },
+    );
+    expect(state.project.style.watermark).toMatchObject({ assetId: "ast_logo", corner: "top-right" });
+
+    const back = run(state, { type: "undo" }, { type: "undo" });
+    expect(back.project.style.watermark).toBeUndefined();
+    // Undo never drops the uploaded file, only the setting.
+    expect(back.project.assets).toEqual([logo]);
+  });
 });
 
 describe("editor reducer: voice", () => {

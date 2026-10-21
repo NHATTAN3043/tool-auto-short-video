@@ -69,6 +69,17 @@ export interface RenderPlanCaption {
   durationInFrames: number;
 }
 
+/** The channel logo as a circle, in pixels of the frame; shown for the whole video. */
+export interface RenderPlanWatermark {
+  src: string;
+  left: number;
+  top: number;
+  diameter: number;
+  opacity: number;
+  borderWidth: number;
+  borderColor: string;
+}
+
 export interface RenderPlan {
   width: number;
   height: number;
@@ -85,4 +96,6 @@ export interface RenderPlan {
   /** Empty when captions are disabled. Text already has `uppercase` applied. */
   captions: RenderPlanCaption[];
   captionStyle: CaptionStyle;
+  /** Absent when there is no logo, it is switched off, or the video has no frames. */
+  watermark?: RenderPlanWatermark;
 }

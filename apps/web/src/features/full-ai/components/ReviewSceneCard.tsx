@@ -6,7 +6,7 @@ import { useId, useState, type ReactNode } from "react";
 
 import { projectFileUrl } from "@/features/media/api";
 import { importCandidate } from "@/features/media-search/api";
-import { linkUrl } from "@/features/media-search/model";
+import { linkUrl, SOURCE_LABELS } from "@/features/media-search/model";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent } from "@/shared/ui/card";
@@ -87,7 +87,7 @@ function Alternatives({
                 className="h-28 w-20 object-cover"
               />
               <span className="absolute bottom-0 left-0 bg-background/80 px-1 text-[10px]">
-                {busy === key ? "Đang tải…" : candidate.provider}
+                {busy === key ? "Đang tải…" : SOURCE_LABELS[candidate.provider]}
               </span>
             </button>
           );

@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { asset, project } from "../testing/fixtures";
 import { withProjectLanguage } from "../ai/apply";
-import { projectLanguage, setMusic, setProjectLanguage, setProjectVoice, updateStyle } from "./operations";
+import {
+  projectLanguage,
+  setMusic,
+  setProjectLanguage,
+  setProjectVoice,
+  updateStyle,
+  watermarkAssetId,
+} from "./operations";
+import { DEFAULT_WATERMARK, WATERMARK_SAFE_OFFSETS } from "./presets";
 import { ProjectSchema } from "./schema";
 
 const withAssets = () =>
@@ -71,6 +79,60 @@ describe("updateStyle", () => {
     ["a negative transition", { transitionMs: -1 }],
   ])("rejects %s", (_label, patch) => {
     expect(() => updateStyle(project(), patch)).toThrow(expect.objectContaining({ code: "INVALID_INPUT" }));
+  });
+});
+
+describe("updateStyle watermark", () => {
+  const withLogo = () =>
+    project({ assets: [asset("logo", "image"), asset("logo2", "image"), asset("clip", "video")] });
+
+  it("adds a logo with the top-left defaults and removes it with null", () => {
+    const added = updateStyle(withLogo(), { watermark: { assetId: "logo" } });
+    expect(added.style.watermark).toEqual({ ...DEFAULT_WATERMARK, assetId: "logo" });
+    expect(added.style.watermark?.corner).toBe("top-left");
+    expect(watermarkAssetId(added)).toBe("logo");
+
+    const removed = updateStyle(added, { watermark: null });
+    expect(removed.style).not.toHaveProperty("watermark");
+    expect(ProjectSchema.safeParse(removed).success).toBe(true);
+  });
+
+  it("keeps the logo when only captions change", () => {
+    const added = updateStyle(withLogo(), { watermark: { assetId: "logo", opacity: 0.5 } });
+    expect(updateStyle(added, { captions: { fontSize: 70 } }).style.watermark).toEqual(added.style.watermark);
+  });
+
+  it("takes the safe offsets of a new corner unless offsets are given", () => {
+    const added = updateStyle(withLogo(), { watermark: { assetId: "logo", offsetY: 0.1 } });
+    const moved = updateStyle(added, { watermark: { corner: "bottom-right" } });
+    expect(moved.style.watermark).toMatchObject({
+      corner: "bottom-right",
+      ...WATERMARK_SAFE_OFFSETS["bottom-right"],
+    });
+    const nudged = updateStyle(added, { watermark: { corner: "bottom-left", offsetY: 0.15 } });
+    expect(nudged.style.watermark).toMatchObject({ corner: "bottom-left", offsetY: 0.15 });
+  });
+
+  it("swaps the image and keeps the rest", () => {
+    const added = updateStyle(withLogo(), { watermark: { assetId: "logo", size: 0.2 } });
+    expect(updateStyle(added, { watermark: { assetId: "logo2" } }).style.watermark).toMatchObject({
+      assetId: "logo2",
+      size: 0.2,
+    });
+  });
+
+  it.each([
+    ["no image for a new logo", { opacity: 0.5 }, "INVALID_INPUT"],
+    ["a missing asset", { assetId: "nope" }, "ASSET_NOT_FOUND"],
+    ["a video as logo", { assetId: "clip" }, "INVALID_MEDIA"],
+    ["a logo too big", { assetId: "logo", size: 0.5 }, "INVALID_INPUT"],
+    ["a logo too faint", { assetId: "logo", opacity: 0.05 }, "INVALID_INPUT"],
+  ])("rejects %s", (_label, watermark, code) => {
+    expect(() => updateStyle(withLogo(), { watermark })).toThrow(expect.objectContaining({ code }));
+  });
+
+  it("reads older projects without a logo", () => {
+    expect(ProjectSchema.parse(project()).style.watermark).toBeUndefined();
   });
 });
 

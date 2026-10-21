@@ -5,6 +5,7 @@ import "./fonts";
 import { AudioLayer } from "./layers/AudioLayer";
 import { CaptionLayer } from "./layers/CaptionLayer";
 import { SceneLayer } from "./layers/SceneLayer";
+import { WatermarkLayer } from "./layers/WatermarkLayer";
 
 export interface ProjectVideoProps extends Record<string, unknown> {
   plan: RenderPlan;
@@ -28,6 +29,7 @@ export function ProjectVideo({ plan }: ProjectVideoProps) {
       ))}
       <AudioLayer plan={plan} />
       <CaptionLayer captions={plan.captions} style={plan.captionStyle} />
+      <WatermarkLayer watermark={plan.watermark} />
     </AbsoluteFill>
   );
 }

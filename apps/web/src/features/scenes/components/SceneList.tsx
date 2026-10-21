@@ -1,6 +1,12 @@
 "use client";
 
-import type { LibrarySfx, Project, Scene, TimelineEntry } from "@studio/domain";
+import {
+  watermarkAssetId,
+  type LibrarySfx,
+  type Project,
+  type Scene,
+  type TimelineEntry,
+} from "@studio/domain";
 import { ClapperboardIcon, FileTextIcon, PlusIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
@@ -116,6 +122,7 @@ export function SceneList({
           key={scene.id}
           projectId={project.id}
           assets={project.assets}
+          logoAssetId={watermarkAssetId(project)}
           sfxLibrary={sfxLibrary}
           scene={scene}
           entry={entry}

@@ -1,13 +1,15 @@
 import { z } from "zod";
 
-import type { LibraryMedia } from "./media-library";
+import { normalizeTags, type LibraryMedia } from "./media-library";
+import type { MediaAsset } from "./schema";
 
-// Searching media for a scene: the shared library first, then free stock providers.
+// Searching media for a scene: the project's own uploads first, then the shared library, then free stock
+// providers.
 
 export const SearchLanguageSchema = z.enum(["en", "vi", "zh"]);
 export type SearchLanguage = z.infer<typeof SearchLanguageSchema>;
 
-export const MediaSourceFilterSchema = z.enum(["library", "pexels", "pixabay"]);
+export const MediaSourceFilterSchema = z.enum(["project", "library", "pexels", "pixabay"]);
 export type MediaSourceFilter = z.infer<typeof MediaSourceFilterSchema>;
 
 export const MediaSearchQuerySchema = z.object({
@@ -15,20 +17,29 @@ export const MediaSearchQuerySchema = z.object({
   kind: z.enum(["video", "image"]),
   /** Language of the query; stock providers are told so they can translate. */
   lang: SearchLanguageSchema.default("en"),
-  sources: z.array(MediaSourceFilterSchema).min(1).default(["library", "pexels", "pixabay"]),
+  sources: z.array(MediaSourceFilterSchema).min(1).default(["project", "library", "pexels", "pixabay"]),
 });
 export type MediaSearchQuery = z.infer<typeof MediaSearchQuerySchema>;
 
-/** A file the UI can show: from a stock CDN (proxied by the server) or from the shared library. */
+/**
+ * A file the UI can show: from a stock CDN (proxied by the server), the shared library, or the project's
+ * own uploads. `path` of a project file is only for the browser; the server finds the file by asset id.
+ */
 export const MediaLinkSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("remote"), url: z.url() }),
   z.object({ type: z.literal("library"), id: z.string().min(1), file: z.enum(["thumbnail", "media"]) }),
+  z.object({
+    type: z.literal("project"),
+    projectId: z.string().min(1),
+    assetId: z.string().min(1),
+    path: z.string().min(1),
+  }),
 ]);
 export type MediaLink = z.infer<typeof MediaLinkSchema>;
 
 export const MediaCandidateSchema = z.object({
   provider: MediaSourceFilterSchema,
-  /** Library item id, or the provider's own id of the stock file. */
+  /** Project asset id, library item id, or the provider's own id of the stock file. */
   ref: z.string().min(1),
   kind: z.enum(["video", "image"]),
   width: z.number().int().positive(),
@@ -77,20 +88,63 @@ export function foldText(text: string): string {
   return text.normalize("NFD").replace(/[̀-ͯ]/gu, "").replace(/[đĐ]/gu, "d").toLocaleLowerCase();
 }
 
+/**
+ * Words that say nothing about a picture (folded, so the Vietnamese ones are without accents). A query
+ * and a tag sharing only "the" or "in" are not a match.
+ */
+const STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "at",
+  "be",
+  "by",
+  "for",
+  "from",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "of",
+  "on",
+  "or",
+  "the",
+  "to",
+  "with",
+  "va",
+  "cua",
+  "la",
+  "cac",
+  "nhung",
+  "mot",
+  "voi",
+  "trong",
+  "tren",
+  "cho",
+]);
+
 function words(text: string): string[] {
   return foldText(text)
     .split(/[^\p{L}\p{N}]+/u)
-    .filter((word) => word !== "");
+    .filter((word) => word !== "" && !STOP_WORDS.has(word));
 }
 
 /**
- * How well a library item matches a query, 0 = not at all. A whole tag equal to the query beats single
- * words; Chinese has no spaces, so a tag that contains the query (or the other way round) also counts.
+ * Below this a tag match is too weak to offer: one shared word is not enough; two words, a tag inside the
+ * query (or the other way round), or the whole tag are.
  */
-export function scoreLibraryItem(item: Pick<LibraryMedia, "tags" | "kind">, query: string): number {
+export const MIN_MATCH_SCORE = 20;
+
+/**
+ * How well tags match a query, 0 = not at all. A whole tag equal to the query beats single words; Chinese
+ * has no spaces, so a tag that contains the query (or the other way round) also counts.
+ */
+export function scoreTags(rawTags: readonly string[], query: string): number {
   const folded = foldText(query.trim());
   if (folded === "") return 0;
-  const tags = item.tags.map(foldText);
+  const tags = rawTags.map(foldText).filter((tag) => tag !== "" && !STOP_WORDS.has(tag));
   if (tags.includes(folded)) return 100;
   let score = 0;
   if (tags.some((tag) => tag.includes(folded) || folded.includes(tag))) score += 40;
@@ -98,6 +152,36 @@ export function scoreLibraryItem(item: Pick<LibraryMedia, "tags" | "kind">, quer
   const tagWords = new Set(tags.flatMap(words));
   for (const word of queryWords) if (tagWords.has(word)) score += 10;
   return score;
+}
+
+export function scoreLibraryItem(item: Pick<LibraryMedia, "tags" | "kind">, query: string): number {
+  return scoreTags(item.tags, query);
+}
+
+/**
+ * Tags written in an uploaded file's name: `__` separates tags; `-`, `_` and `.` separate words.
+ * `cat-sleeping__orange-cat__sofa.mp4` → ["cat sleeping", "orange cat", "sofa"].
+ */
+export function tagsFromFileName(fileName: string): string[] {
+  const base = fileName.replace(/\.[^./\\]+$/u, "");
+  return normalizeTags(base.split("__").map((part) => part.replace(/[-_.]+/gu, " ")));
+}
+
+/**
+ * Best matches among the project's own uploads, by the tags in their file names, portrait first. Stock
+ * copies and voice files are not offered: the library and the providers already find the stock ones.
+ */
+export function searchProjectAssets(
+  assets: readonly MediaAsset[],
+  query: string,
+  kind: "video" | "image",
+): MediaAsset[] {
+  return assets
+    .filter((asset) => asset.source === "upload" && asset.kind === kind)
+    .map((asset) => ({ asset, score: scoreTags(tagsFromFileName(asset.fileName), query) }))
+    .filter(({ score }) => score >= MIN_MATCH_SCORE)
+    .sort((a, b) => b.score - a.score || Number(portraitItem(b.asset)) - Number(portraitItem(a.asset)))
+    .map(({ asset }) => asset);
 }
 
 /** Best library matches of the right kind, portrait and more-used first. */
@@ -109,7 +193,7 @@ export function searchLibrary(
   return items
     .filter((item) => item.kind === kind)
     .map((item) => ({ item, score: scoreLibraryItem(item, query) }))
-    .filter(({ score }) => score > 0)
+    .filter(({ score }) => score >= MIN_MATCH_SCORE)
     .sort(
       (a, b) =>
         b.score - a.score ||
@@ -120,8 +204,9 @@ export function searchLibrary(
 }
 
 /**
- * Final order: library first, then stock providers taking turns, portrait before landscape within each
- * provider. Stock files already in the library are not shown twice.
+ * Final order: own files first (as given: project uploads, then the library), then stock providers taking
+ * turns, portrait before landscape within each provider. Stock files already in the library are not shown
+ * twice.
  */
 export function rankCandidates(
   library: readonly MediaCandidate[],
@@ -144,6 +229,27 @@ export function rankCandidates(
     }
   }
   return result;
+}
+
+/** A file the user already has: a project upload or a shared library item, as opposed to stock. */
+export const isOwnCandidate = (candidate: Pick<MediaCandidate, "provider">) =>
+  candidate.provider === "project" || candidate.provider === "library";
+
+/**
+ * At most `max` candidates, of which at most `maxOwn` are own files (project uploads, library), so stock
+ * always gets places to be compared against. Places that stock cannot fill go back to own files. The order
+ * is kept.
+ */
+export function capOwnCandidates(
+  candidates: readonly MediaCandidate[],
+  max: number,
+  maxOwn: number,
+): MediaCandidate[] {
+  const own = candidates.filter(isOwnCandidate);
+  const stock = candidates.filter((candidate) => !isOwnCandidate(candidate));
+  const ownCount = Math.min(own.length, Math.max(maxOwn, max - stock.length));
+  const kept = new Set([...own.slice(0, ownCount), ...stock.slice(0, max - ownCount)]);
+  return candidates.filter((candidate) => kept.has(candidate));
 }
 
 export interface Rendition {

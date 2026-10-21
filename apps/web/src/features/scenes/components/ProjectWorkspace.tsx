@@ -21,7 +21,7 @@ import { AiAssistantPanel } from "@/features/ai";
 import { FullAiLock, FullAiPanel, useFullAi } from "@/features/full-ai";
 import { AudioSettings, MediaLibrary } from "@/features/media";
 import { SceneMediaSearch, SharedMediaLibrary } from "@/features/media-search";
-import { PreviewPanel, StyleSettings, usePreview } from "@/features/preview";
+import { PreviewPanel, StyleSettings, usePreview, WatermarkSettings } from "@/features/preview";
 import { MODE_LABELS, ProjectSettingsDialog } from "@/features/project";
 import { RenderPanel } from "@/features/render";
 import { copySfxToProject, SfxLibraryPanel, useSfxLibrary } from "@/features/sfx";
@@ -50,7 +50,7 @@ const TABS: readonly { id: WorkspaceTab; label: string; icon: LucideIcon }[] = [
   { id: "script", label: "Script", icon: FileTextIcon },
   { id: "library", label: "Thư viện", icon: ImagesIcon },
   { id: "audio", label: "Âm thanh", icon: AudioLinesIcon },
-  { id: "captions", label: "Phụ đề", icon: CaptionsIcon },
+  { id: "captions", label: "Phụ đề & logo", icon: CaptionsIcon },
   { id: "ai", label: "Trợ lý AI", icon: SparklesIcon },
 ];
 
@@ -357,6 +357,14 @@ export function ProjectWorkspace({
             <TabPanel id="captions" active={tab}>
               <StyleSettings
                 style={editor.project.style}
+                onChange={editor.updateStyle}
+                onCommit={editor.commitTyping}
+              />
+              <WatermarkSettings
+                projectId={editor.project.id}
+                assets={editor.project.assets}
+                watermark={editor.project.style.watermark}
+                onAssetAdded={editor.assetAdded}
                 onChange={editor.updateStyle}
                 onCommit={editor.commitTyping}
               />

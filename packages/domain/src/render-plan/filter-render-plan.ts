@@ -8,6 +8,8 @@ export interface RenderLayers {
   voices: boolean;
   music: boolean;
   sfx: boolean;
+  /** The channel logo. */
+  watermark: boolean;
 }
 
 export const ALL_LAYERS: Readonly<RenderLayers> = {
@@ -16,6 +18,7 @@ export const ALL_LAYERS: Readonly<RenderLayers> = {
   voices: true,
   music: true,
   sfx: true,
+  watermark: true,
 };
 
 /**
@@ -37,6 +40,7 @@ export function filterRenderPlan(plan: RenderPlan, layers: RenderLayers): Render
     sfx: layers.sfx ? plan.sfx : [],
   };
   if (!layers.music) delete next.music;
+  if (!layers.watermark) delete next.watermark;
   return next;
 }
 

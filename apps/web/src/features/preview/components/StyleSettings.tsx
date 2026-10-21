@@ -1,56 +1,15 @@
 "use client";
 
 import { TransitionSchema, type ProjectStyle, type StylePatch } from "@studio/domain";
-import { useId, type ReactNode } from "react";
+import { useId } from "react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Label } from "@/shared/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/shared/ui/radio-group";
-import { Slider } from "@/shared/ui/slider";
 import { Switch } from "@/shared/ui/switch";
 
 import { STYLE_LIMITS, TRANSITION_LABELS } from "../labels";
-
-function SliderRow({
-  label,
-  value,
-  display,
-  min,
-  max,
-  step,
-  disabled = false,
-  onChange,
-  onCommit,
-}: {
-  label: string;
-  value: number;
-  display: ReactNode;
-  min: number;
-  max: number;
-  step: number;
-  disabled?: boolean;
-  onChange: (value: number) => void;
-  onCommit: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="w-36 shrink-0 text-sm text-muted-foreground">{label}</span>
-      <Slider
-        min={min}
-        max={max}
-        step={step}
-        value={[value]}
-        disabled={disabled}
-        thumbLabels={[label]}
-        onValueChange={([next = value]) => {
-          onChange(next);
-        }}
-        onValueCommit={onCommit}
-      />
-      <span className="w-14 text-right font-mono text-sm">{display}</span>
-    </div>
-  );
-}
+import { SliderRow } from "./SliderRow";
 
 /** Caption look and scene transition. Every change shows in the preview right away. */
 export function StyleSettings({

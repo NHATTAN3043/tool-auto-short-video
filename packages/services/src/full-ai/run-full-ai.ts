@@ -1,10 +1,13 @@
 import {
   AI_RANK_MAX_CANDIDATES,
+  AI_RANK_MAX_OWN,
   AI_RANK_MAX_SCENES,
   applyFullAiOutline,
   applyScenePlan,
   applyVisualPlans,
   assignMedia,
+  candidateKey,
+  capOwnCandidates,
   DEFAULT_MAX_WORDS_PER_SCENE,
   DomainError,
   FULL_AI_MAX_WARNINGS,
@@ -12,6 +15,7 @@ import {
   FullAiResultSchema,
   initialVoiceSettings,
   isDomainError,
+  isOwnCandidate,
   narrationForSpeech,
   normalizeMediaRanking,
   normalizeScenePlan,
@@ -83,7 +87,7 @@ export type RunFullAiResult =
   /** The project keeps what the finished steps made. */
   | { ok: false; message: string; costUsd: number };
 
-/** Search queries tried per scene, in order, until one finds media. */
+/** Search queries tried per scene, in order, until enough candidates are found to rank. */
 const QUERIES_PER_SCENE = 2;
 /** Candidates tried per scene when a download fails. */
 const IMPORT_ATTEMPTS = 3;
@@ -116,8 +120,11 @@ export function makeRunFullAi(deps: RunFullAiDeps) {
     };
     let costUsd = 0;
     let current: FullAiStep = steps[0] ?? "scenes";
-    /** Ranked candidates per scene, filled by the media and rank steps. */
-    const found = new Map<string, { query: string; candidates: MediaCandidate[] }>();
+    /**
+     * Ranked candidates per scene, filled by the media and rank steps. `rejected` are the keys the AI said
+     * do not fit; they stay in the list for "Đổi media" but are never picked automatically.
+     */
+    const found = new Map<string, { query: string; candidates: MediaCandidate[]; rejected: Set<string> }>();
 
     async function paid<T extends { usage: { usd: number } }>(call: () => Promise<T>): Promise<T> {
       try {
@@ -216,17 +223,30 @@ export function makeRunFullAi(deps: RunFullAiDeps) {
       for (const [index, scene] of project.scenes.entries()) {
         const queries = scene.visualPlan?.searchQueries.slice(0, QUERIES_PER_SCENE) ?? [];
         const kind = scene.visualPlan?.preferredMedia ?? "video";
+        // A query that finds only a few files leaves room: the next query adds to them.
+        let merged: MediaCandidate[] = [];
+        let firstQuery: string | undefined;
         for (const query of queries) {
           const result = await deps.searchMedia({
             projectId,
-            query: { query, kind, lang: "en", sources: ["library", "pexels", "pixabay"] },
+            query: { query, kind, lang: "en", sources: ["project", "library", "pexels", "pixabay"] },
           });
           for (const failure of result.errors)
             warn(`${failure.provider} lỗi khi tìm media: ${failure.message}`);
-          if (result.candidates.length > 0) {
-            found.set(scene.id, { query, candidates: result.candidates.slice(0, AI_RANK_MAX_CANDIDATES) });
-            break;
-          }
+          const seen = new Set(merged.map(candidateKey));
+          const fresh = result.candidates.filter((candidate) => !seen.has(candidateKey(candidate)));
+          if (fresh.length > 0) firstQuery ??= query;
+          merged = [...merged, ...fresh];
+          if (merged.length >= AI_RANK_MAX_CANDIDATES) break;
+        }
+        if (firstQuery !== undefined) {
+          // Own files first, but at most AI_RANK_MAX_OWN of them: stock always gets places too.
+          const ownFirst = [
+            ...merged.filter(isOwnCandidate),
+            ...merged.filter((candidate) => !isOwnCandidate(candidate)),
+          ];
+          const candidates = capOwnCandidates(ownFirst, AI_RANK_MAX_CANDIDATES, AI_RANK_MAX_OWN);
+          found.set(scene.id, { query: firstQuery, candidates, rejected: new Set() });
         }
         if (!found.has(scene.id)) {
           warn(
@@ -257,7 +277,9 @@ export function makeRunFullAi(deps: RunFullAiDeps) {
           const { data } = await paid(() => ai.rankMedia(rankRequest, images));
           for (const ranked of normalizeMediaRanking(data, rankRequest).scenes) {
             const entry = found.get(ranked.sceneId);
-            if (entry) entry.candidates = orderByRanking(entry.candidates, ranked.keys);
+            if (!entry) continue;
+            entry.candidates = orderByRanking(entry.candidates, ranked.keys);
+            entry.rejected = new Set(ranked.rejected);
           }
         } catch (error) {
           if (isBudget(error)) throw error;
@@ -273,9 +295,16 @@ export function makeRunFullAi(deps: RunFullAiDeps) {
       for (const [index, scene] of scenes.entries()) {
         const entry = found.get(scene.id);
         if (!entry) continue;
+        const usable = entry.candidates.filter((candidate) => !entry.rejected.has(candidateKey(candidate)));
+        if (usable.length === 0) {
+          // The AI found nothing fitting: an empty scene is better than a wrong picture.
+          warn(`${sceneLabel(project, scene.id)}: AI thấy không media nào phù hợp, hãy chọn tay`);
+          input.onProgress(stepProgress((index + 1) / scenes.length));
+          continue;
+        }
         let asset: MediaAsset | null = null;
         let lastError = "";
-        for (const candidate of entry.candidates.slice(0, IMPORT_ATTEMPTS)) {
+        for (const candidate of usable.slice(0, IMPORT_ATTEMPTS)) {
           try {
             ({ asset } = await deps.importCandidate({
               projectId,

@@ -16,14 +16,22 @@ export const LANGUAGE_LABELS: Record<SearchLanguage, string> = {
 };
 
 export const SOURCE_LABELS: Record<MediaSourceFilter, string> = {
+  project: "File của dự án",
   library: "Thư viện chung",
   pexels: "Pexels",
   pixabay: "Pixabay",
 };
 
+/** Every source, own files first: what "Tất cả nguồn" searches. */
+export const ALL_SOURCES: MediaSourceFilter[] = ["project", "library", "pexels", "pixabay"];
+
 /** Browser URL of a candidate file: stock files go through the server proxy, never straight to the CDN. */
 export function linkUrl(link: MediaLink): string {
   if (link.type === "remote") return `/api/media-proxy?url=${encodeURIComponent(link.url)}`;
+  if (link.type === "project") {
+    const path = link.path.split("/").map(encodeURIComponent).join("/");
+    return `/api/projects/${encodeURIComponent(link.projectId)}/files/${path}`;
+  }
   return `/api/media-library/${encodeURIComponent(link.id)}/file?file=${link.file}`;
 }
 

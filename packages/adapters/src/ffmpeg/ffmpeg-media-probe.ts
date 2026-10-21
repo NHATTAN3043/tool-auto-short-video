@@ -42,12 +42,13 @@ export class FfmpegMediaProbe implements MediaProbePort {
     options: ThumbnailOptions,
   ): Promise<void> {
     // ffmpeg applies the rotation flag while decoding, so phone videos come out upright.
+    // No seek at 0: ffmpeg 9 drops the only frame of a JPEG after `-ss 0` and writes nothing.
+    const seek = options.atMs > 0 ? ["-ss", (options.atMs / 1000).toFixed(3)] : [];
     await this.run(this.ffmpegPath, [
       "-v",
       "error",
       "-y",
-      "-ss",
-      (options.atMs / 1000).toFixed(3),
+      ...seek,
       "-i",
       absoluteInput,
       "-frames:v",

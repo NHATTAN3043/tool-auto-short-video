@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { MediaAsset } from "../media/schema";
 import type { Project } from "../project/schema";
 import { asset, project, scene } from "../testing/fixtures";
-import { buildRenderPlan } from "./build-render-plan";
+import { DEFAULT_WATERMARK } from "../project/presets";
+import { buildRenderPlan, placeWatermark } from "./build-render-plan";
 
 const resolveUrl = (a: MediaAsset) => `/files/${a.path}`;
 const cover = { fit: "cover" as const, focusX: 0.5, volume: 0, kenBurns: false };
@@ -158,6 +159,53 @@ describe("buildRenderPlan", () => {
     const wrongKind = { ...demo(), voiceAssetId: "vid1" };
     expect(() => buildRenderPlan(wrongKind, resolveUrl)).toThrow(
       expect.objectContaining({ code: "INVALID_MEDIA" }),
+    );
+  });
+});
+
+describe("watermark", () => {
+  const logo = { ...DEFAULT_WATERMARK, assetId: "logo" };
+  const frame = { width: 1080, height: 1920 };
+  const withLogo = (watermark = logo) => {
+    const base = project({
+      assets: [asset("logo", "image")],
+      scenes: [scene("a", "Xin chào", { durationMs: 2000 })],
+    });
+    return { ...base, style: { ...base.style, watermark } };
+  };
+
+  it("places the circle in the top-left by default", () => {
+    expect(buildRenderPlan(withLogo(), resolveUrl).watermark).toEqual({
+      src: "/files/media/logo.bin",
+      left: 43,
+      top: 134,
+      diameter: 130,
+      opacity: 0.9,
+      borderWidth: 4,
+      borderColor: "#FFFFFF",
+    });
+  });
+
+  it.each([
+    ["top-right", { left: 1080 - 43 - 130, top: 422 }],
+    ["bottom-left", { left: 43, top: 1920 - 422 - 130 }],
+    ["bottom-right", { left: 1080 - 43 - 130, top: 1920 - 422 - 130 }],
+  ] as const)("measures %s from its own edges", (corner, box) => {
+    expect(placeWatermark({ ...logo, corner, offsetY: 0.22 }, "x", frame)).toMatchObject(box);
+  });
+
+  it("is left out when switched off or when there is nothing to show", () => {
+    expect(buildRenderPlan(withLogo({ ...logo, enabled: false }), resolveUrl)).not.toHaveProperty(
+      "watermark",
+    );
+    const empty = { ...withLogo(), scenes: [] };
+    expect(buildRenderPlan(empty, resolveUrl)).not.toHaveProperty("watermark");
+  });
+
+  it("rejects a logo whose file is gone", () => {
+    const broken = { ...withLogo(), assets: [] };
+    expect(() => buildRenderPlan(broken, resolveUrl)).toThrow(
+      expect.objectContaining({ code: "ASSET_NOT_FOUND" }),
     );
   });
 });

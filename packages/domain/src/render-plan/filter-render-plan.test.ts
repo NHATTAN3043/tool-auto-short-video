@@ -37,10 +37,19 @@ function plan(): RenderPlan {
     sfx: [{ src: "pop.mp3", from: 30, durationInFrames: 10, volume: 1 }],
     captions: [{ text: "XIN CHÀO", from: 0, durationInFrames: 30 }],
     captionStyle: { ...DEFAULT_CAPTION_STYLE },
+    watermark: {
+      src: "logo.png",
+      left: 43,
+      top: 134,
+      diameter: 130,
+      opacity: 0.9,
+      borderWidth: 4,
+      borderColor: "#FFFFFF",
+    },
   };
 }
 
-const none = { visuals: false, captions: false, voices: false, music: false, sfx: false };
+const none = { visuals: false, captions: false, voices: false, music: false, sfx: false, watermark: false };
 
 describe("filterRenderPlan", () => {
   it("keeps everything with all layers on", () => {
@@ -52,6 +61,10 @@ describe("filterRenderPlan", () => {
     expect(visualsOnly.scenes).toEqual(plan().scenes);
     expect(visualsOnly).toMatchObject({ captions: [], voices: [], sfx: [], durationInFrames: 90 });
     expect(visualsOnly).not.toHaveProperty("music");
+    expect(visualsOnly).not.toHaveProperty("watermark");
+    expect(filterRenderPlan(plan(), { ...none, visuals: true, watermark: true }).watermark).toEqual(
+      plan().watermark,
+    );
 
     const voiceOnly = filterRenderPlan(plan(), { ...none, voices: true });
     expect(voiceOnly.scenes[0]).not.toHaveProperty("media");

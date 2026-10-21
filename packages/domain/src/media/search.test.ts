@@ -1,14 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import { normalizeTags, stockSourceRef, type LibraryMedia } from "./media-library";
+import type { MediaAsset } from "./schema";
 import {
+  capOwnCandidates,
   foldText,
+  isOwnCandidate,
   MediaSearchQuerySchema,
+  MIN_MATCH_SCORE,
   pickPreviewRendition,
   pickRendition,
   rankCandidates,
   scoreLibraryItem,
+  scoreTags,
   searchLibrary,
+  searchProjectAssets,
+  tagsFromFileName,
   type MediaCandidate,
 } from "./search";
 
@@ -79,6 +86,79 @@ describe("scoreLibraryItem / searchLibrary", () => {
     ]);
     expect(searchLibrary(items, "cat", "image").map((i) => i.id)).toEqual(["image"]);
   });
+
+  it("ignores stop words and drops matches below the minimum score", () => {
+    const beach = item("beach", ["cat sleeping in the sun"]);
+    expect(scoreTags(beach.tags, "woman walking in the city")).toBe(0);
+    // One shared word is a hint, not a match.
+    expect(scoreTags(["cat playing"], "cat sleeping")).toBeLessThan(MIN_MATCH_SCORE);
+    expect(searchLibrary([item("p", ["cat playing"])], "cat sleeping", "video")).toEqual([]);
+    expect(scoreTags(["orange cat", "sofa"], "orange cat on sofa")).toBeGreaterThanOrEqual(MIN_MATCH_SCORE);
+  });
+});
+
+describe("tagsFromFileName / searchProjectAssets", () => {
+  const asset = (id: string, fileName: string, extra: Partial<MediaAsset> = {}): MediaAsset => ({
+    id,
+    kind: "video",
+    source: "upload",
+    fileName,
+    path: `media/${id}.mp4`,
+    createdAt: "2026-10-01T00:00:00.000Z",
+    ...extra,
+  });
+
+  it("reads tags from the file name: __ between tags, - _ . between words", () => {
+    expect(tagsFromFileName("cat-sleeping__Orange_Cat__sofa.mp4")).toEqual([
+      "cat sleeping",
+      "orange cat",
+      "sofa",
+    ]);
+    expect(tagsFromFileName("mèo-ngủ.trên-ghế.jpg")).toEqual(["mèo ngủ trên ghế"]);
+    expect(tagsFromFileName("clip")).toEqual(["clip"]);
+  });
+
+  it("offers only matching uploads of the right kind, best and portrait first", () => {
+    const assets = [
+      asset("land", "orange-cat__sofa.mp4", { width: 1920, height: 1080 }),
+      asset("port", "orange-cat__sofa.mp4", { width: 1080, height: 1920 }),
+      asset("exact", "cat-on-sofa.mp4", { width: 1920, height: 1080 }),
+      asset("photo", "orange-cat.jpg", { kind: "image" }),
+      asset("stock", "pexels-1.mp4", { source: "pexels" }),
+      asset("dog", "dog-running__beach.mp4"),
+    ];
+    expect(searchProjectAssets(assets, "cat on sofa", "video").map((a) => a.id)).toEqual([
+      "exact",
+      "port",
+      "land",
+    ]);
+    expect(searchProjectAssets(assets, "orange cat", "image").map((a) => a.id)).toEqual(["photo"]);
+    expect(searchProjectAssets(assets, "city traffic", "video")).toEqual([]);
+  });
+});
+
+describe("capOwnCandidates", () => {
+  const own = (n: number) =>
+    Array.from({ length: n }, (_, i) => candidate("library", `lib_${String(i)}`, 1080, 1920));
+  const stock = (n: number) =>
+    Array.from({ length: n }, (_, i) => candidate("pexels", `p${String(i)}`, 1080, 1920));
+  const refs = (list: MediaCandidate[]) => list.map((c) => c.ref);
+
+  it("keeps places for stock when own files would fill the list", () => {
+    expect(refs(capOwnCandidates([...own(8), ...stock(8)], 10, 5))).toEqual([
+      ...refs(own(5)),
+      ...refs(stock(5)),
+    ]);
+  });
+
+  it("gives places stock cannot fill back to own files", () => {
+    expect(refs(capOwnCandidates([...own(8), ...stock(2)], 10, 5))).toEqual([
+      ...refs(own(8)),
+      ...refs(stock(2)),
+    ]);
+    expect(refs(capOwnCandidates(own(3), 10, 5))).toEqual(refs(own(3)));
+    expect(isOwnCandidate(candidate("project", "ast_1", 1080, 1920))).toBe(true);
+  });
 });
 
 describe("rankCandidates", () => {
@@ -119,7 +199,7 @@ describe("MediaSearchQuerySchema", () => {
       query: "mèo",
       kind: "video",
       lang: "en",
-      sources: ["library", "pexels", "pixabay"],
+      sources: ["project", "library", "pexels", "pixabay"],
     });
     expect(MediaSearchQuerySchema.safeParse({ query: "", kind: "video" }).success).toBe(false);
   });

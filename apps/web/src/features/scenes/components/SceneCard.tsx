@@ -58,6 +58,7 @@ export interface SceneCardActions {
 export function SceneCard({
   projectId,
   assets,
+  logoAssetId,
   sfxLibrary,
   scene,
   entry,
@@ -69,6 +70,8 @@ export function SceneCard({
 }: {
   projectId: string;
   assets: readonly MediaAsset[];
+  /** The channel logo, left out of the media picker. */
+  logoAssetId: string | undefined;
   sfxLibrary: readonly LibrarySfx[];
   scene: Scene;
   entry: TimelineEntry;
@@ -221,6 +224,7 @@ export function SceneCard({
             sceneLabel={`Cảnh ${String(entry.index + 1)}`}
             media={scene.media}
             assets={assets}
+            logoAssetId={logoAssetId}
             actions={{
               onAssign: (assetId) => {
                 actions.onAssignMedia(scene.id, assetId);

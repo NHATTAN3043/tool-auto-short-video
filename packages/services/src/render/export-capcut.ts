@@ -38,7 +38,14 @@ export interface ExportCapcutDeps {
 
 const OUTPUT_NAME = /^[A-Za-z0-9_-]+$/u;
 
-const NONE: RenderLayers = { visuals: false, captions: false, voices: false, music: false, sfx: false };
+const NONE: RenderLayers = {
+  visuals: false,
+  captions: false,
+  voices: false,
+  music: false,
+  sfx: false,
+  watermark: false,
+};
 
 /** Separate audio tracks, each rendered on its own and as long as the video. */
 const AUDIO_TRACKS: readonly { name: string; layer: keyof RenderLayers; label: string }[] = [
@@ -137,7 +144,8 @@ export function makeExportCapcut(deps: ExportCapcutDeps) {
         project,
         projectDir,
         outputPath: video,
-        layers: { ...NONE, visuals: true },
+        // The channel logo stays burned into the picture, so the package cannot be reposted without it.
+        layers: { ...NONE, visuals: true, watermark: true },
         onProgress: report,
       });
       entries.push({ name: VIDEO_NAME, file: video });

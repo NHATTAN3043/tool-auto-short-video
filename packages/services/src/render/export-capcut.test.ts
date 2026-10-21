@@ -57,7 +57,7 @@ describe("exportCapcut", () => {
     expect(s.renderer.requests).toHaveLength(1);
     expect(s.renderer.requests[0]).toMatchObject({
       outputPath: "/memory/projects/prj_1/render/job_1-capcut/video_khong_phu_de.mp4",
-      layers: { visuals: true, captions: false, voices: false, music: false, sfx: false },
+      layers: { visuals: true, captions: false, voices: false, music: false, sfx: false, watermark: true },
     });
     expect(s.renderer.requests[0]?.format).toBeUndefined();
 
@@ -105,9 +105,9 @@ describe("exportCapcut", () => {
       "audio/hieu_ung.wav",
     ]);
     expect(audioRenders.map((request) => request.layers)).toEqual([
-      { visuals: false, captions: false, voices: true, music: false, sfx: false },
-      { visuals: false, captions: false, voices: false, music: true, sfx: false },
-      { visuals: false, captions: false, voices: false, music: false, sfx: true },
+      { visuals: false, captions: false, voices: true, music: false, sfx: false, watermark: false },
+      { visuals: false, captions: false, voices: false, music: true, sfx: false, watermark: false },
+      { visuals: false, captions: false, voices: false, music: false, sfx: true, watermark: false },
     ]);
     expect(s.archive.archives[0]?.entries.map((entry) => entry.name)).toContain("audio/hieu_ung.wav");
   });

@@ -77,13 +77,14 @@ describe("interpretProbe", () => {
 describe.skipIf(!hasFfmpeg)("FfmpegMediaProbe (real ffmpeg)", () => {
   const probe = new FfmpegMediaProbe({ ffmpegPath, ffprobePath });
   let dir = "";
-  const files = { video: "", portrait: "", image: "", mp3: "" };
+  const files = { video: "", portrait: "", image: "", jpeg: "", mp3: "" };
 
   beforeAll(() => {
     dir = mkdtempSync(path.join(tmpdir(), "studio-ffmpeg-"));
     files.video = makeVideo(dir);
     files.portrait = makeRotatedVideo(dir);
     files.image = makeImage(dir);
+    files.jpeg = makeImage(dir, "still.jpg");
     files.mp3 = makeMp3(dir);
   }, 60_000);
 
@@ -126,6 +127,7 @@ describe.skipIf(!hasFfmpeg)("FfmpegMediaProbe (real ffmpeg)", () => {
     for (const [input, name, atMs] of [
       [files.video, "video.jpg", 1000],
       [files.image, "image.jpg", 0],
+      [files.jpeg, "jpeg.jpg", 0],
     ] as const) {
       const out = path.join(dir, name);
       await probe.createThumbnail(input, out, { atMs, width: 360 });

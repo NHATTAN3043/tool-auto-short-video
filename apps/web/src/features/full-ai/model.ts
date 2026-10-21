@@ -290,9 +290,13 @@ export function alternativesFor(
   const candidates = result?.scenes.find((scene) => scene.sceneId === sceneId)?.candidates ?? [];
   const scene = project.scenes.find((candidate) => candidate.id === sceneId);
   const current = project.assets.find((asset) => asset.id === scene?.media?.assetId);
-  // Imported stock files are named `<provider>-<ref>.<ext>`; library copies keep that name too.
+  // Imported stock files are named `<provider>-<ref>.<ext>`; library copies keep that name too. A project
+  // upload is the asset itself.
   return candidates.filter(
     (candidate) =>
-      current === undefined || !current.fileName.startsWith(`${candidate.provider}-${candidate.ref}.`),
+      current === undefined ||
+      (candidate.provider === "project"
+        ? candidate.ref !== current.id
+        : !current.fileName.startsWith(`${candidate.provider}-${candidate.ref}.`)),
   );
 }

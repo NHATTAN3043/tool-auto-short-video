@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AiTaskSchema, type MediaRankRequest } from "../ai/schema";
+import { AI_RANK_MAX_CANDIDATES, AiTaskSchema, type MediaRankRequest } from "../ai/schema";
 import { normalizeMediaRanking, normalizeSceneRewrite } from "../ai/normalize";
 import { orderByRanking, toRankCandidate } from "../ai/rank";
 import { candidateKey, type MediaCandidate } from "../media/search";
@@ -110,8 +110,34 @@ describe("media ranking", () => {
     });
   });
 
+  it("moves rejected candidates last and keeps only known rejected keys", () => {
+    const result = normalizeMediaRanking(
+      {
+        scenes: [
+          {
+            sceneId: "s1",
+            keys: ["pexels:video:a", "pexels:video:b", "pexels:video:c"],
+            rejected: ["pexels:video:a", "pexels:video:zzz"],
+          },
+          { sceneId: "s2", keys: ["pexels:video:d"], rejected: [] },
+        ],
+      },
+      rankRequest,
+    );
+    expect(result).toEqual({
+      scenes: [
+        {
+          sceneId: "s1",
+          keys: ["pexels:video:b", "pexels:video:c", "pexels:video:a"],
+          rejected: ["pexels:video:a"],
+        },
+        { sceneId: "s2", keys: ["pexels:video:d"] },
+      ],
+    });
+  });
+
   it("limits candidates and scenes per call", () => {
-    const many = Array.from({ length: 7 }, (_, i) => candidate(String(i)));
+    const many = Array.from({ length: AI_RANK_MAX_CANDIDATES + 1 }, (_, i) => candidate(String(i)));
     expect(
       AiTaskSchema.safeParse({
         type: "rank_media",

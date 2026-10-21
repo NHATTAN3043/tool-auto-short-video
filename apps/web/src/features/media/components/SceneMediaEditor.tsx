@@ -91,18 +91,21 @@ export function SceneMediaEditor({
   sceneLabel,
   media,
   assets,
+  logoAssetId,
   actions,
 }: {
   projectId: string;
   sceneLabel: string;
   media: SceneMedia | undefined;
   assets: readonly MediaAsset[];
+  /** The channel logo, never offered as a scene's picture. */
+  logoAssetId?: string | undefined;
   actions: SceneMediaActions;
 }) {
   const [picking, setPicking] = useState(false);
   const fitName = useId();
   const kenBurnsId = useId();
-  const visuals = assets.filter((asset) => asset.kind !== "audio");
+  const visuals = assets.filter((asset) => asset.kind !== "audio" && asset.id !== logoAssetId);
   const asset = media ? assets.find((candidate) => candidate.id === media.assetId) : undefined;
 
   const pick = (assetId: string) => {

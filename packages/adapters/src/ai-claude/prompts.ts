@@ -262,6 +262,12 @@ export const RankOutputSchema = z.object({
       ranking: z
         .array(z.number().int())
         .describe("Số thứ tự các ứng viên của cảnh, phù hợp nhất đứng trước, đủ mọi ứng viên"),
+      rejected: z
+        .array(z.number().int())
+        .optional()
+        .describe(
+          "Số thứ tự các ứng viên KHÔNG hợp với cảnh (sai chủ đề, sai nội dung); rỗng nếu đều dùng được",
+        ),
     }),
   ),
 });
@@ -291,6 +297,7 @@ export function candidateLine(candidate: RankCandidate): string {
 export const RANK_INTRO = [
   "Xếp hạng media cho từng cảnh của một video dọc 9:16: ứng viên hợp với lời đọc và ý đồ hình ảnh nhất đứng đầu.",
   "Ưu tiên nội dung khớp lời đọc, rồi tới khung dọc, rồi chất lượng hình. Đánh số theo đúng số thứ tự đã cho.",
+  "Ứng viên nào sai chủ đề hoặc sai nội dung so với cảnh thì liệt kê vào rejected; chỉ loại khi chắc chắn không hợp.",
 ].join("\n");
 
 /** One scene of a ranking request; in vision mode each candidate's image follows its line. */

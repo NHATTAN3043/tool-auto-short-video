@@ -167,7 +167,7 @@ export function createContainer(env: Env = loadRepoEnv(REPO_ROOT), clock: Clock 
   const providers: MediaSearchPort[] = [];
   if (env.PEXELS_API_KEY !== undefined) providers.push(new PexelsSearch({ apiKey: env.PEXELS_API_KEY }));
   if (env.PIXABAY_API_KEY !== undefined) providers.push(new PixabaySearch({ apiKey: env.PIXABAY_API_KEY }));
-  const rankImages = makeResolveRankImages({ library: mediaLibrary, storage, providers });
+  const rankImages = makeResolveRankImages({ library: mediaLibrary, repo, storage, providers });
   // Read when a job runs, so a skill installed or edited after the worker started is used too.
   const skills = new LocalSkillCatalog(resolveSkillsDir(env, REPO_ROOT));
   const guardedAi = ai ? (context: PaidCallContext) => new GuardedAi(ai, costGuard, context) : null;

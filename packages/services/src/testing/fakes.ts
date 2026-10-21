@@ -491,6 +491,9 @@ export class FakeAi implements AiPort {
     return this.answer({ type: "scenes", input }, this.scenes, guidance);
   }
 
+  /** Candidate keys the ranking says do not fit, in every scene that has them. */
+  rejectKeys: string[] = [];
+
   /** Ranks each scene's candidates in reverse order, so tests can tell a ranked list from the original. */
   rankMedia(
     input: MediaRankRequest,
@@ -500,10 +503,15 @@ export class FakeAi implements AiPort {
     return this.answer(
       { type: "rank_media", input },
       {
-        scenes: input.scenes.map((scene) => ({
-          sceneId: scene.sceneId,
-          keys: scene.candidates.map((candidate) => candidate.key).reverse(),
-        })),
+        scenes: input.scenes.map((scene) => {
+          const keys = scene.candidates.map((candidate) => candidate.key);
+          const rejected = keys.filter((key) => this.rejectKeys.includes(key));
+          return {
+            sceneId: scene.sceneId,
+            keys: [...keys].reverse(),
+            ...(rejected.length > 0 && { rejected }),
+          };
+        }),
       },
     );
   }

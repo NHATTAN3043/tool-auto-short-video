@@ -1,6 +1,7 @@
 import {
   assignMedia,
   createProject,
+  DEFAULT_WATERMARK,
   MODE_PRESETS,
   scriptToScenes,
   type LibraryMedia,
@@ -98,6 +99,88 @@ describe("searchMedia", () => {
     const result = await s.search({ projectId: "prj_1", query });
     expect(result.candidates.map((c) => c.ref)).toEqual(["x1"]);
     expect(result.errors).toEqual([{ provider: "pexels", message: "pexels is down" }]);
+  });
+
+  it("offers the project's own uploads first, by the tags in their file names, and imports them as is", async () => {
+    const s = await setup("manual");
+    const upload = (id: string, fileName: string, source: "upload" | "pexels" = "upload") => ({
+      id,
+      kind: "video" as const,
+      source,
+      fileName,
+      path: `media/${id}.mp4`,
+      thumbnailPath: `thumbnails/${id}.jpg`,
+      width: 1080,
+      height: 1920,
+      createdAt: "2026-10-10T00:00:00.000Z",
+    });
+    await s.repo.update("prj_1", (project) => ({
+      ...project,
+      assets: [
+        upload("ast_cat", "orange-cat__sofa.mp4"),
+        upload("ast_dog", "dog-running__beach.mp4"),
+        upload("ast_stock", "pexels-cat.mp4", "pexels"),
+      ],
+    }));
+    const result = await s.search({
+      projectId: "prj_1",
+      query: { ...query, query: "orange cat", sources: ["project", "library", "pexels", "pixabay"] },
+    });
+    expect(result.candidates).toEqual([
+      {
+        provider: "project",
+        ref: "ast_cat",
+        kind: "video",
+        width: 1080,
+        height: 1920,
+        thumbnail: {
+          type: "project",
+          projectId: "prj_1",
+          assetId: "ast_cat",
+          path: "thumbnails/ast_cat.jpg",
+        },
+        preview: { type: "project", projectId: "prj_1", assetId: "ast_cat", path: "media/ast_cat.mp4" },
+        description: "orange cat, sofa",
+      },
+    ]);
+
+    const before = await s.repo.get("prj_1");
+    const picked = await s.importCandidate({
+      projectId: "prj_1",
+      candidate: { provider: "project", ref: "ast_cat", kind: "video" },
+      query: "orange cat",
+    });
+    expect(picked.asset.id).toBe("ast_cat");
+    expect((await s.repo.get("prj_1")).assets).toEqual(before.assets);
+    await expect(
+      s.importCandidate({
+        projectId: "prj_1",
+        candidate: { provider: "project", ref: "ast_missing", kind: "video" },
+        query: "x",
+      }),
+    ).rejects.toMatchObject({ code: "ASSET_NOT_FOUND" });
+  });
+
+  it("never offers the channel logo as a scene's picture", async () => {
+    const s = await setup("manual");
+    const image = (id: string, fileName: string) => ({
+      id,
+      kind: "image" as const,
+      source: "upload" as const,
+      fileName,
+      path: `media/${id}.png`,
+      createdAt: "2026-10-10T00:00:00.000Z",
+    });
+    await s.repo.update("prj_1", (project) => ({
+      ...project,
+      assets: [image("ast_logo", "cat-channel__logo.png"), image("ast_cat", "cat__sofa.png")],
+      style: { ...project.style, watermark: { ...DEFAULT_WATERMARK, assetId: "ast_logo" } },
+    }));
+    const result = await s.search({
+      projectId: "prj_1",
+      query: { ...query, kind: "image", sources: ["project"] },
+    });
+    expect(result.candidates.map((candidate) => candidate.ref)).toEqual(["ast_cat"]);
   });
 });
 

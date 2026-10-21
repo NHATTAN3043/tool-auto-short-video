@@ -2,6 +2,7 @@
 
 import {
   AI_RANK_MAX_CANDIDATES,
+  isOwnCandidate,
   orderByRanking,
   SearchLanguageSchema,
   toRankCandidate,
@@ -72,7 +73,7 @@ function CandidateCard({
         </span>
       </button>
       <div className="flex flex-wrap items-center gap-1 p-1.5">
-        <Badge variant={candidate.provider === "library" ? "default" : "outline"}>
+        <Badge variant={isOwnCandidate(candidate) ? "default" : "outline"}>
           {SOURCE_LABELS[candidate.provider]}
         </Badge>
         <span className="text-xs text-muted-foreground">
@@ -418,6 +419,7 @@ export function SceneMediaSearch({
           }}
         >
           <option value="all">Tất cả nguồn</option>
+          <option value="project">{SOURCE_LABELS.project}</option>
           <option value="library">{SOURCE_LABELS.library}</option>
           <option value="pexels">{SOURCE_LABELS.pexels}</option>
           <option value="pixabay">{SOURCE_LABELS.pixabay}</option>

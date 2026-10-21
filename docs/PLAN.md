@@ -398,6 +398,27 @@ hỏi" và "Bỏ qua câu hỏi". **Không làm:** hỏi nhiều vòng, lịch s
 **Tiêu chí xong:** từ ý tưởng tới video mà không có lệnh gọi trả phí nào ngoài câu hỏi và khung kịch bản trước khi
 người dùng bấm duyệt; lời đọc trong dự án đúng từng chữ với khung đã duyệt.
 
+### Bổ sung — Tìm cả file upload của dự án (ADR 0016)
+
+**Phạm vi:** Full AI và ô tìm media tìm cả video/ảnh người dùng upload vào dự án, theo tag đọc từ tên file
+(`cat-sleeping__orange-cat__sofa.mp4`). Chấm điểm bỏ stop-word và có ngưỡng tối thiểu. Tối đa 5/10 ứng viên xếp hạng là
+file của mình, còn lại cho stock. AI xếp hạng được loại ứng viên không hợp, và Full AI không tự gán ứng viên bị loại.
+**Không làm:** ô sửa tag hay mô tả cho file upload, AI tự gắn tag, upload thẳng vào thư viện chung.
+
+**Tiêu chí xong:** dự án có file `orange-cat__sofa.mp4` thì cảnh "orange cat" được đề xuất file đó; thư viện chung có
+nhiều clip khớp yếu vẫn chừa chỗ cho stock; cảnh mà AI loại hết ứng viên thì để trống kèm cảnh báo.
+
+### Bổ sung — Logo kênh hình tròn (ADR 0017)
+
+**Phạm vi:** trong tab "Phụ đề & logo", tải ảnh logo lên hoặc chọn một ảnh của dự án. Logo được vẽ thành hình tròn ở
+một trong 4 góc (mặc định trên trái), hiện suốt video. Chỉnh được kích thước, khoảng cách tới mép, độ rõ, viền trắng,
+bật/tắt và bỏ logo; preview cập nhật ngay, hoàn tác được. Logo có trong video render và trong video của gói CapCut, và
+không bị đề xuất làm hình của cảnh. **Không làm:** logo mặc định dùng chung cho mọi dự án, logo chạy giữa các góc,
+logo động, nhiều logo, chữ watermark.
+
+**Tiêu chí xong:** dự án có logo ở góc trên trái thì preview và file MP4 render ra có cùng vòng tròn logo ở cùng vị
+trí, suốt video; dự án cũ không có logo vẫn mở và render như trước.
+
 ---
 
 ## 4. Sau V1 (chỉ khi POC chứng minh giá trị)

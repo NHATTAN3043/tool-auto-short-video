@@ -29,7 +29,9 @@ export {
   DEFAULT_CAPTION_STYLE,
   DEFAULT_MAX_WORDS_PER_SCENE,
   DEFAULT_PROJECT_STYLE,
+  DEFAULT_WATERMARK,
   MODE_PRESETS,
+  WATERMARK_SAFE_OFFSETS,
 } from "./project/presets";
 export {
   createProject,
@@ -44,6 +46,7 @@ export {
   setProjectLanguage,
   setProjectVoice,
   updateStyle,
+  watermarkAssetId,
   type StylePatch,
 } from "./project/operations";
 export { RECOMMENDED_MAX_DURATION_MS, reviewProject, type ProjectWarning } from "./project/review";

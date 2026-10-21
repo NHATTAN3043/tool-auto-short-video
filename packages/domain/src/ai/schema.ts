@@ -53,7 +53,12 @@ export const VisualPlanRequestSchema = z.object({
 export type VisualPlanRequest = z.infer<typeof VisualPlanRequestSchema>;
 
 /** Candidates per scene sent to the AI for ranking: each one may be an image in vision mode. */
-export const AI_RANK_MAX_CANDIDATES = 6;
+export const AI_RANK_MAX_CANDIDATES = 10;
+/**
+ * Of those, at most this many are own files (project uploads, shared library), so a weak own match always
+ * meets stock to be compared against.
+ */
+export const AI_RANK_MAX_OWN = 5;
 /** Scenes per ranking call; vision calls stay under the API's limit on images per request. */
 export const AI_RANK_MAX_SCENES = 15;
 
@@ -148,9 +153,18 @@ export const VisualPlansSuggestionSchema = z.object({
 });
 export type VisualPlansSuggestion = z.infer<typeof VisualPlansSuggestionSchema>;
 
-/** Candidate keys of each scene, best first. */
+/**
+ * Candidate keys of each scene, best first. `rejected` are the keys the AI says do not fit the scene at
+ * all; they stay in `keys` (last) so the user can still pick them by hand.
+ */
 export const MediaRankingSuggestionSchema = z.object({
-  scenes: z.array(z.object({ sceneId: z.string().min(1), keys: z.array(z.string().min(1)) })),
+  scenes: z.array(
+    z.object({
+      sceneId: z.string().min(1),
+      keys: z.array(z.string().min(1)),
+      rejected: z.array(z.string().min(1)).optional(),
+    }),
+  ),
 });
 export type MediaRankingSuggestion = z.infer<typeof MediaRankingSuggestionSchema>;
 
