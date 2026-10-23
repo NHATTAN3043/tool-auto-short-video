@@ -1,6 +1,6 @@
 # Kế hoạch triển khai — Phân tích clip tự tải và báo cảnh thiếu
 
-**Trạng thái:** đang làm (P1 xong, P2 phần code xong) · ADR dự kiến: 0019 · Bổ sung cho ADR 0008 (thư viện chung), 0010 (Full AI), 0016 (file upload)
+**Trạng thái:** đang làm (P1, P2 xong) · ADR dự kiến: 0019 · Bổ sung cho ADR 0008 (thư viện chung), 0010 (Full AI), 0016 (file upload)
 
 ## Mục tiêu
 
@@ -101,7 +101,7 @@ Mỗi phần là một commit riêng (Conventional Commit), để lỗi ở ph�
 grabFrames(path, atMs[], outDir, { maxSide }) }`.
 - `packages/adapters/src/ffmpeg/ffmpeg-clip-frames.ts` (mới): `scdet` trên bản thu nhỏ 320px + đọc
   `lavfi.scd.time` từ stderr; khung bằng `-ss` trước `-i`, cạnh dài ≤ 480px.
-- Script `pnpm clip:shots <file...> [--threshold=10]`: in danh sách đoạn và ghi trang HTML các khung ra thư mục tạm
+- Script `pnpm clip:shots <file...> [--threshold=5]`: in danh sách đoạn và ghi trang HTML các khung ra thư mục tạm
   để xem bằng mắt.
 - **Đổi so với bản đầu:** bỏ tấm lưới. `drawtext` của ffmpeg crash khi thiếu fontconfig và cần đường dẫn font khác
   nhau giữa Windows/Linux. Thay vào đó P4 gửi **mỗi đoạn một ảnh**, đứng sau dòng chữ "Shot N" (API cho tối đa 100
@@ -117,7 +117,7 @@ grabFrames(path, atMs[], outDir, { maxSide }) }`.
 **Kiểm tra tay:** chạy `pnpm clip:shots` trên 5 clip mẫu, mở trang HTML:
 
 - [ ] Không đoạn nào < 1,2s hoặc > 8s; ≤ 48 đoạn mỗi clip.
-- [ ] Đa số chỗ chuyển cảnh thật được bắt; ghi lại chỗ bỏ sót/chia vụn → chỉnh `threshold` (bắt đầu 10).
+- [ ] Đa số chỗ chuyển cảnh thật được bắt; ghi lại chỗ bỏ sót/chia vụn → chỉnh `threshold` (đã chốt 5, so khung cách 250ms).
 - [ ] Thời gian xử lý một clip 5 phút: ghi lại (mục tiêu < 60s).
 
 **Xong khi:** người dùng thấy cách chia đoạn chấp nhận được trên 5 clip.
@@ -248,8 +248,8 @@ grabFrames(path, atMs[], outDir, { maxSide }) }`.
 
 ## Nhật ký kiểm thử
 
-| Phần | Ngày       | Kết quả                                                            | Ghi chú                                                 |
-| ---- | ---------- | ------------------------------------------------------------------ | ------------------------------------------------------- |
-| P0   |            | chờ người dùng gửi 5 clip + 2 script                               |                                                         |
-| P1   | 2026-10-23 | Đạt: 860/860 test, lint, typecheck, arch                           | Mô tả chỉ cộng điểm; đoạn chỉ khớp mô tả (< 20) bị loại |
-| P2   | 2026-10-23 | Code đạt: 7 test ffmpeg; clip tổng hợp 3 phút 1080p → 24 đoạn, 27s | Chờ kiểm tra tay trên 5 clip thật                       |
+| Phần | Ngày       | Kết quả                                                                                                                                                                                                                                         | Ghi chú                                                                                            |
+| ---- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| P0   |            | chờ người dùng gửi 5 clip + 2 script                                                                                                                                                                                                            |                                                                                                    |
+| P1   | 2026-10-23 | Đạt: 860/860 test, lint, typecheck, arch                                                                                                                                                                                                        | Mô tả chỉ cộng điểm; đoạn chỉ khớp mô tả (< 20) bị loại                                            |
+| P2   | 2026-10-23 | Đạt trên 5 clip thật (D:\clip, short 4K HEVC ~2 phút, có phụ đề + logo): ngưỡng 10 chỉ bắt 0–9 điểm cắt vì cảnh chuyển bằng fade; đổi sang so khung cách 250ms (`fps=4`) + ngưỡng 5 → bia 23/24, chandi 19/21 điểm cắt đếm tay; 22–33 đoạn/clip | Tách 6–25s/clip nhờ `-hwaccel auto -skip_frame noref`; chụp ảnh ~1s/ảnh trên 4K → ~50s/clip 2 phút |

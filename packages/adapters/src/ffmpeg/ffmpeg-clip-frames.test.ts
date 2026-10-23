@@ -15,8 +15,8 @@ import {
   makeSingleShotVideo,
 } from "./test-media";
 
-/** One frame at 30fps, the precision of a cut time. */
-const FRAME_MS = 34;
+/** Cuts are found on frames 250ms apart, so that is the precision of a cut time. */
+const SAMPLE_MS = 250;
 
 describe("parseSceneCuts", () => {
   it("reads the scdet times in ms, sorted and without duplicates", () => {
@@ -49,11 +49,11 @@ describe.runIf(hasFfmpeg)("FfmpegClipFrames", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("finds the scene changes of a clip to the frame", async () => {
+  it("finds the scene changes of a clip within one sample", async () => {
     const cuts = await frames.detectCuts(shots);
     expect(cuts).toHaveLength(2);
-    expect(Math.abs((cuts[0] ?? 0) - 2000)).toBeLessThanOrEqual(FRAME_MS);
-    expect(Math.abs((cuts[1] ?? 0) - 5000)).toBeLessThanOrEqual(FRAME_MS);
+    expect(Math.abs((cuts[0] ?? 0) - 2000)).toBeLessThanOrEqual(SAMPLE_MS);
+    expect(Math.abs((cuts[1] ?? 0) - 5000)).toBeLessThanOrEqual(SAMPLE_MS);
   });
 
   it("finds no cut in one continuous shot", async () => {

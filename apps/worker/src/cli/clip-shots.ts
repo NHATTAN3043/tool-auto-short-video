@@ -1,4 +1,4 @@
-// pnpm clip:shots <video...> [--threshold=10] — cuts videos into shots the way clip analysis will (ADR 0019),
+// pnpm clip:shots <video...> [--threshold=5] — cuts videos into shots the way clip analysis will (ADR 0019),
 // without any AI call, and writes a page of stills to check the cuts by eye. Nothing is stored in the studio.
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -20,7 +20,7 @@ const threshold = thresholdArg ? Number(thresholdArg.slice("--threshold=".length
 const files = args.filter((arg) => !arg.startsWith("--"));
 if (files.length === 0 || !Number.isFinite(threshold) || threshold <= 0 || threshold > 100) {
   console.error(
-    "Usage: pnpm clip:shots <video...> [--threshold=10]  (threshold 1–100, lower finds more cuts)",
+    "Usage: pnpm clip:shots <video...> [--threshold=5]  (threshold 1–100, lower finds more cuts)",
   );
   process.exit(1);
 }

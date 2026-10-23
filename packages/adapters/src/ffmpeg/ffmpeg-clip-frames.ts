@@ -7,19 +7,28 @@ import { runTool, runToolForStderr } from "./run-tool";
 
 export interface FfmpegClipFramesOptions {
   ffmpegPath?: string;
-  /** Per ffmpeg run; finding cuts decodes the whole clip, a few minutes of 1080p included. */
+  /** Per ffmpeg run; finding cuts decodes the whole clip, a few minutes of 4K included. */
   timeoutMs?: number;
 }
 
-/** Found by trying on real downloaded clips (docs/plans/clip-analysis.md, P2). */
-export const DEFAULT_CUT_THRESHOLD = 10;
+/**
+ * Tried on five real downloaded shorts (docs/plans/clip-analysis.md, P2): at 5, 23/24 and 19/21 hand-counted
+ * cuts were found; at 10 only half. A false cut only adds a short shot, a missed one hides a whole scene.
+ */
+export const DEFAULT_CUT_THRESHOLD = 5;
+
+/**
+ * Frames compared per second. Shorts change scenes with fades, which spread the change over many frames, so
+ * neighbouring frames at 30fps barely differ (scores under 6); frames 250ms apart catch the whole fade.
+ */
+const DETECT_FPS = 4;
 
 /** Width the clip is shrunk to before finding cuts: far faster, and a cut is just as visible. */
 const DETECT_WIDTH = 320;
 
 const SCD_TIME = /lavfi\.scd\.time:\s*([\d.]+)/gu;
 
-/** Cut times in ms from the `scdet` report ffmpeg prints on stderr. */
+/** Cut times in ms from the `scdet` report ffmpeg prints on stderr (the first frame after the cut). */
 export function parseSceneCuts(stderr: string): number[] {
   const cuts = [...stderr.matchAll(SCD_TIME)].map((match) => Math.round(Number(match[1]) * 1000));
   return [...new Set(cuts.filter((ms) => Number.isFinite(ms)))].sort((a, b) => a - b);
@@ -40,8 +49,14 @@ export class FfmpegClipFrames implements ClipFramesPort {
     const stderr = await runToolForStderr(
       this.ffmpegPath,
       [
-        ...["-hide_banner", "-nostats", "-i", absoluteInput, "-an", "-sn"],
-        ...["-vf", `scale=${String(DETECT_WIDTH)}:-2,scdet=threshold=${String(threshold)}`],
+        // Hardware decoding when there is any (ffmpeg falls back to software), and no decoding of frames
+        // nothing refers to: together they halve the time on 4K HEVC phone clips, with the same cuts.
+        ...["-hide_banner", "-nostats", "-hwaccel", "auto", "-skip_frame", "noref"],
+        ...["-i", absoluteInput, "-an", "-sn"],
+        ...[
+          "-vf",
+          `fps=${String(DETECT_FPS)},scale=${String(DETECT_WIDTH)}:-2,scdet=threshold=${String(threshold)}`,
+        ],
         ...["-f", "null", "-"],
       ],
       this.timeoutMs,
