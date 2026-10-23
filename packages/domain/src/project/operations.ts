@@ -14,6 +14,7 @@ export interface StylePatch {
   captions?: Partial<CaptionStyle>;
   transition?: ProjectStyle["transition"];
   transitionMs?: number;
+  scenePauseMs?: number;
   /** null removes the logo; the first patch must name its `assetId`. */
   watermark?: Partial<Watermark> | null;
 }
@@ -86,6 +87,7 @@ export function updateStyle(project: Project, patch: StylePatch): Project {
     ...rest,
     ...(patch.transition !== undefined && { transition: patch.transition }),
     ...(patch.transitionMs !== undefined && { transitionMs: patch.transitionMs }),
+    ...(patch.scenePauseMs !== undefined && { scenePauseMs: patch.scenePauseMs }),
     captions: { ...project.style.captions, ...patch.captions },
     ...(watermark !== undefined && { watermark }),
   });

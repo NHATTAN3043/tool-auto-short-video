@@ -4,6 +4,7 @@ import type { Project } from "../project/schema";
 import { asset, project, scene } from "../testing/fixtures";
 import { buildCaptions, captionsToSrt, chunkNarration } from "./captions";
 import { computeTimeline, timelineDurationMs } from "./compute-timeline";
+import { scenePauseMs } from "./scene-pause";
 
 const spans = (p: Project) =>
   computeTimeline(p).map(({ sceneId, startMs, endMs, source }) => [sceneId, startMs, endMs, source]);
@@ -48,10 +49,11 @@ describe("computeTimeline", () => {
         scene("c", "Xin chào"),
       ],
     });
+    // The scene voice is followed by the default 0.3s pause; the manual scene gets none.
     expect(spans(p)).toEqual([
       ["a", 0, 2000, "manual"],
-      ["b", 2000, 7000, "scene-voice"],
-      ["c", 7000, 8200, "estimate"],
+      ["b", 2000, 7300, "scene-voice"],
+      ["c", 7300, 8500, "estimate"],
     ]);
   });
 
@@ -67,8 +69,8 @@ describe("computeTimeline", () => {
       ["b", 3000, 6000, "project-voice"],
     ]);
     expect(spans({ ...both, voiceTrack: "scenes" })).toEqual([
-      ["a", 0, 5000, "scene-voice"],
-      ["b", 5000, 6346, "estimate"],
+      ["a", 0, 5300, "scene-voice"],
+      ["b", 5300, 6646, "estimate"],
     ]);
   });
 
@@ -140,6 +142,63 @@ describe("chunkNarration", () => {
 
   it("returns nothing for empty narration", () => {
     expect(chunkNarration("  ", 6)).toEqual([]);
+  });
+});
+
+describe("scene pause", () => {
+  const voiced = (style: Partial<Project["style"]>) =>
+    project({
+      assets: [asset("sv", "audio", { durationMs: 2000 })],
+      style: { ...project().style, ...style },
+      scenes: [
+        scene("a", "Mèo ngủ rất nhiều,", { voiceAssetId: "sv" }),
+        scene("b", "để giữ sức đi săn.", { voiceAssetId: "sv" }),
+        scene("c", "Bất kỳ.", { voiceAssetId: "sv", durationMs: 1500 }),
+      ],
+    });
+
+  it("adds the full pause after a sentence and two thirds mid-sentence, never to manual scenes", () => {
+    const timeline = computeTimeline(voiced({ scenePauseMs: 300 }));
+    expect(timeline.map(({ startMs, endMs, pauseMs }) => [startMs, endMs, pauseMs])).toEqual([
+      [0, 2200, 200],
+      [2200, 4500, 300],
+      [4500, 6000, undefined],
+    ]);
+  });
+
+  it("keeps scenes as long as their voice when the pause is off or absent", () => {
+    const off = voiced({ scenePauseMs: 0 });
+    const absent = { ...off.style };
+    delete absent.scenePauseMs;
+    for (const p of [off, { ...off, style: absent }]) {
+      expect(computeTimeline(p).map((entry) => [entry.endMs, "pauseMs" in entry])).toEqual([
+        [2000, false],
+        [4000, false],
+        [5500, false],
+      ]);
+    }
+  });
+
+  it("times captions over the voice and holds the last caption through the pause", () => {
+    const p = voiced({ scenePauseMs: 300, captions: { ...project().style.captions, maxWordsPerCaption: 2 } });
+    const sceneB = buildCaptions(p).filter((caption) => caption.sceneId === "b");
+    expect(sceneB.map(({ text, startMs, endMs }) => [text, startMs, endMs])).toEqual([
+      // The lone last word joins the caption before it; weights 2 and 4.5 share the 2s of voice.
+      ["để giữ", 2200, 2815],
+      ["sức đi săn.", 2815, 4500],
+    ]);
+  });
+});
+
+describe("scenePauseMs", () => {
+  it.each([
+    ["Xong rồi.", 300, 300],
+    ["Thật sao?”", 300, 300],
+    ["Còn nữa,", 300, 200],
+    ["Không dấu", 450, 300],
+    ["Xong rồi.", 0, 0],
+  ])("%s with %ims → %ims", (narration, base, expected) => {
+    expect(scenePauseMs(narration, base)).toBe(expected);
   });
 });
 

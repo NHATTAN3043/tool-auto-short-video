@@ -101,6 +101,11 @@ export function SceneCard({
           <Badge variant={entry.source === "estimate" ? "outline" : "secondary"} title={source.description}>
             {source.title}
           </Badge>
+          {entry.pauseMs !== undefined ? (
+            <Badge variant="outline" title="Khoảng nghỉ lấy hơi sau giọng đọc, chỉnh trong phần Chuyển cảnh.">
+              + nghỉ {formatSecondsInput(entry.pauseMs)}s
+            </Badge>
+          ) : null}
         </div>
         <div className="flex items-center gap-1">
           <Button

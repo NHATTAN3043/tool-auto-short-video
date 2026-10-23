@@ -49,6 +49,7 @@ export const DEFAULT_CAPTION_STYLE: Readonly<CaptionStyle> = {
 export const DEFAULT_PROJECT_STYLE: Readonly<Omit<ProjectStyle, "captions">> = {
   transition: "fade",
   transitionMs: 250,
+  scenePauseMs: 300,
   background: "#000000",
 };
 

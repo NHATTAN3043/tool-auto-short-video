@@ -11,6 +11,7 @@ export const STYLE_LIMITS = {
   positionPercent: { min: 10, max: 90, step: 1 },
   wordsPerCaption: { min: 1, max: 12, step: 1 },
   transitionMs: { min: 100, max: 1000, step: 50 },
+  scenePauseMs: { min: 0, max: 1000, step: 50 },
 } as const;
 
 export const WATERMARK_CORNER_LABELS: Record<WatermarkCorner, string> = {

@@ -110,6 +110,22 @@ describe("buildRenderPlan", () => {
     expect(plan.voices).toEqual([{ src: "/files/media/sv.bin", from: 160, durationInFrames: 45 }]);
   });
 
+  it("leaves the scene pause silent after the voice, before the next scene starts", () => {
+    const p = project({
+      voiceTrack: "scenes",
+      assets: [asset("sv", "audio", { durationMs: 1500 })],
+      scenes: [
+        scene("a", "Một câu.", { voiceAssetId: "sv" }),
+        scene("b", "Câu sau.", { voiceAssetId: "sv" }),
+      ],
+    });
+    // 1.5s of voice + the default 0.3s pause = 54 frames per scene.
+    expect(buildRenderPlan(p, resolveUrl).voices).toEqual([
+      { src: "/files/media/sv.bin", from: 0, durationInFrames: 54 },
+      { src: "/files/media/sv.bin", from: 54, durationInFrames: 54 },
+    ]);
+  });
+
   it("clips a project voice longer than the video", () => {
     const p = { ...demo(), scenes: demo().scenes.slice(0, 1) };
     expect(buildRenderPlan(p, resolveUrl).voices[0]?.durationInFrames).toBe(100);

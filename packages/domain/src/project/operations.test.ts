@@ -62,11 +62,13 @@ describe("updateStyle", () => {
       captions: { fontSize: 80, uppercase: true },
       transition: "fade",
       transitionMs: 300,
+      scenePauseMs: 500,
     });
     expect(next.style).toEqual({
       ...original.style,
       transition: "fade",
       transitionMs: 300,
+      scenePauseMs: 500,
       captions: { ...original.style.captions, fontSize: 80, uppercase: true },
     });
     expect(original.style.captions.fontSize).not.toBe(80);
@@ -77,6 +79,8 @@ describe("updateStyle", () => {
     ["a zero font size", { captions: { fontSize: 0 } }],
     ["zero words per caption", { captions: { maxWordsPerCaption: 0 } }],
     ["a negative transition", { transitionMs: -1 }],
+    ["a negative scene pause", { scenePauseMs: -1 }],
+    ["a scene pause over 1.5s", { scenePauseMs: 1501 }],
   ])("rejects %s", (_label, patch) => {
     expect(() => updateStyle(project(), patch)).toThrow(expect.objectContaining({ code: "INVALID_INPUT" }));
   });

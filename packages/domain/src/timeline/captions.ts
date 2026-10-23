@@ -46,7 +46,10 @@ export function chunkNarration(text: string, maxWords: number): string[] {
   return chunks.map((chunk) => chunk.join(" "));
 }
 
-/** Captions timed within each scene by speech weight; the last caption of a scene ends exactly with it. */
+/**
+ * Captions timed by speech weight over the spoken part of each scene, so they follow the voice; the last
+ * caption stays up through the scene pause and ends exactly with the scene.
+ */
 export function buildCaptions(
   project: Project,
   timeline: readonly TimelineEntry[] = computeTimeline(project),
@@ -57,10 +60,10 @@ export function buildCaptions(
     const entry = timeline[sceneIndex];
     if (!entry) return;
     const chunks = chunkNarration(scene.narration, maxWords);
-    const durations = distributeByWeight(entry.durationMs, chunks.map(speechWeight));
+    const durations = distributeByWeight(entry.durationMs - (entry.pauseMs ?? 0), chunks.map(speechWeight));
     let startMs = entry.startMs;
     chunks.forEach((text, i) => {
-      const endMs = startMs + (durations[i] ?? 0);
+      const endMs = i === chunks.length - 1 ? entry.endMs : startMs + (durations[i] ?? 0);
       if (endMs > startMs) captions.push({ sceneId: scene.id, index: captions.length, text, startMs, endMs });
       startMs = endMs;
     });

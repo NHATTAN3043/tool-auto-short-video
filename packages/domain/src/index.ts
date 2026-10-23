@@ -97,6 +97,7 @@ export {
   type TimelineEntry,
 } from "./timeline/compute-timeline";
 export { buildCaptions, captionsToSrt, chunkNarration, type Caption } from "./timeline/captions";
+export { scenePauseMs } from "./timeline/scene-pause";
 
 export { narrationForSpeech, voiceContentHash } from "./voice/content-hash";
 export {

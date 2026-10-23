@@ -60,10 +60,17 @@ export const WatermarkSchema = z.object({
 });
 export type Watermark = z.infer<typeof WatermarkSchema>;
 
+export const MAX_SCENE_PAUSE_MS = 1500;
+
 export const ProjectStyleSchema = z.object({
   captions: CaptionStyleSchema,
   transition: TransitionSchema,
   transitionMs: z.number().int().nonnegative(),
+  /**
+   * Breath after each scene voice, at the end of a sentence (ADR 0018); a scene ending mid-sentence gets
+   * two thirds. Absent = 0 so older projects keep their timing.
+   */
+  scenePauseMs: z.number().int().min(0).max(MAX_SCENE_PAUSE_MS).optional(),
   background: z.string().min(1),
   /** Optional so older files stay valid. */
   watermark: WatermarkSchema.optional(),

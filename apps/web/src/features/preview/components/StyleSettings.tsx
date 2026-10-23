@@ -11,7 +11,9 @@ import { Switch } from "@/shared/ui/switch";
 import { STYLE_LIMITS, TRANSITION_LABELS } from "../labels";
 import { SliderRow } from "./SliderRow";
 
-/** Caption look and scene transition. Every change shows in the preview right away. */
+const formatSeconds = (ms: number) => `${(ms / 1000).toFixed(2).replace(".", ",")}s`;
+
+/** Caption look, scene transition and the pause between scenes. Every change shows in the preview right away. */
 export function StyleSettings({
   style,
   onChange,
@@ -26,6 +28,7 @@ export function StyleSettings({
   const uppercaseId = useId();
   const transitionName = useId();
   const { captions } = style;
+  const scenePauseMs = style.scenePauseMs ?? 0;
   const off = !captions.enabled;
   const apply = (patch: StylePatch) => {
     onChange(patch);
@@ -118,7 +121,7 @@ export function StyleSettings({
             <SliderRow
               label="Thời lượng"
               value={style.transitionMs}
-              display={`${(style.transitionMs / 1000).toFixed(2).replace(".", ",")}s`}
+              display={formatSeconds(style.transitionMs)}
               {...STYLE_LIMITS.transitionMs}
               onChange={(transitionMs) => {
                 onChange({ transitionMs });
@@ -126,6 +129,20 @@ export function StyleSettings({
               onCommit={onCommit}
             />
           ) : null}
+          <SliderRow
+            label="Nghỉ giữa các cảnh"
+            value={scenePauseMs}
+            display={scenePauseMs === 0 ? "Tắt" : formatSeconds(scenePauseMs)}
+            {...STYLE_LIMITS.scenePauseMs}
+            onChange={(next) => {
+              onChange({ scenePauseMs: next });
+            }}
+            onCommit={onCommit}
+          />
+          <p className="text-xs text-muted-foreground">
+            Lấy hơi sau giọng đọc của từng cảnh, đủ mức khi cảnh hết câu, 2/3 khi câu còn tiếp. Không áp dụng
+            cho cảnh nhập thời lượng tay.
+          </p>
         </div>
       </CardContent>
     </Card>
