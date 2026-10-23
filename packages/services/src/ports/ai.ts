@@ -3,6 +3,7 @@ import type {
   BriefQuestionsRequest,
   BriefQuestionsSuggestion,
   AiUsage,
+  DescribeShotsRequest,
   MediaRankingSuggestion,
   MediaRankRequest,
   ScenePlanRequest,
@@ -14,6 +15,7 @@ import type {
   ScriptRequest,
   SkillGuidance,
   ScriptSuggestion,
+  ShotDescriptions,
   VisualPlanRequest,
   VisualPlansSuggestion,
 } from "@studio/domain";
@@ -53,7 +55,7 @@ export class AiCallError extends Error {
   }
 }
 
-/** A candidate thumbnail for vision ranking: a public HTTPS link the provider fetches, or the bytes. */
+/** An image for the AI (a ranking thumbnail, a shot still): a public HTTPS link it fetches, or the bytes. */
 export type RankImage =
   | { type: "url"; url: string }
   | { type: "base64"; mediaType: "image/jpeg" | "image/png" | "image/webp"; data: string };
@@ -93,4 +95,11 @@ export interface AiPort {
     input: ScriptOutlineRequest,
     guidance?: SkillGuidance,
   ): Promise<AiCall<ScriptOutlineSuggestion>>;
+  /** Cost of describing one clip of `shotCount` stills; worked out from sizes, no call is made. */
+  estimateShots(shotCount: number): AiEstimate;
+  /**
+   * What each shot of one clip shows (ADR 0019), in one call. `frames[i]` is the still of `input.shots[i]`;
+   * indexes in the answer are those positions.
+   */
+  describeShots(input: DescribeShotsRequest, frames: readonly RankImage[]): Promise<AiCall<ShotDescriptions>>;
 }

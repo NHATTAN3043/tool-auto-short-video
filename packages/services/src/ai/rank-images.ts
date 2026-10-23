@@ -28,6 +28,23 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+/** An image file from storage as base64 for the AI; null when its type or size cannot be sent. */
+export async function readStoredImage(storage: StoragePort, key: string): Promise<RankImage | null> {
+  const mediaType = MEDIA_TYPES[fileExtension(key) ?? ""];
+  if (mediaType === undefined) return null;
+  const size = (await storage.stat(key))?.size;
+  if (size === undefined || size > MAX_IMAGE_BYTES) return null;
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of storage.read(key)) chunks.push(chunk);
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return { type: "base64", mediaType, data: toBase64(bytes) };
+}
+
 /**
  * The thumbnails of a vision ranking, by candidate key. A stock thumbnail is sent as its link, and only
  * when it is on a provider's media host (the request may come from the browser); a library item or a
@@ -53,21 +70,7 @@ export function makeResolveRankImages(deps: {
     return relative === undefined ? null : storedImage(`projects/${projectId}/${relative}`);
   }
 
-  async function storedImage(key: string): Promise<RankImage | null> {
-    const mediaType = MEDIA_TYPES[fileExtension(key) ?? ""];
-    if (mediaType === undefined) return null;
-    const size = (await deps.storage.stat(key))?.size;
-    if (size === undefined || size > MAX_IMAGE_BYTES) return null;
-    const chunks: Uint8Array[] = [];
-    for await (const chunk of deps.storage.read(key)) chunks.push(chunk);
-    const bytes = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.length;
-    }
-    return { type: "base64", mediaType, data: toBase64(bytes) };
-  }
+  const storedImage = (key: string) => readStoredImage(deps.storage, key);
 
   function remoteImage(url: string): RankImage | null {
     let parsed: URL;

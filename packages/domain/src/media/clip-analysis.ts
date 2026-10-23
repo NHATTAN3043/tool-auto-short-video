@@ -112,3 +112,17 @@ export function shotsFromCuts(cutsMs: readonly number[], durationMs: number): Sh
 export function shotMiddleMs(span: ShotSpan): number {
   return span.startMs + Math.floor(length(span) / 2);
 }
+
+/** Most clips one analysis job takes, so its cost stays readable and one bad clip does not hold many. */
+export const MAX_CLIPS_PER_JOB = 20;
+
+/** The `clip` job (ADR 0019): which library videos to analyze, and what it may cost. */
+export const ClipJobInfoSchema = z.object({
+  libraryIds: z.array(z.string().min(1)).min(1).max(MAX_CLIPS_PER_JOB),
+  /** Analyze again videos that already have shots (a new paid call). */
+  reanalyze: z.boolean().optional(),
+  /** Worst case estimated before the run; every call is still checked by CostGuard. */
+  maxUsd: z.number().nonnegative(),
+  costUsd: z.number().nonnegative().optional(),
+});
+export type ClipJobInfo = z.infer<typeof ClipJobInfoSchema>;

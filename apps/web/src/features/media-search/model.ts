@@ -40,11 +40,17 @@ export function linkUrl(link: MediaLink): string {
     const path = link.path.split("/").map(encodeURIComponent).join("/");
     return `/api/projects/${encodeURIComponent(link.projectId)}/files/${path}`;
   }
-  return `/api/media-library/${encodeURIComponent(link.id)}/file?file=${link.file}`;
+  const shot = link.file === "shot" ? `&shot=${String(link.shot ?? 0)}` : "";
+  return `/api/media-library/${encodeURIComponent(link.id)}/file?file=${link.file}${shot}`;
 }
 
 export function libraryFileUrl(id: string, file: "media" | "thumbnail"): string {
   return linkUrl({ type: "library", id, file });
+}
+
+/** The still of one shot of an analyzed library video (ADR 0019). */
+export function shotFileUrl(id: string, shot: number): string {
+  return linkUrl({ type: "library", id, file: "shot", shot });
 }
 
 export interface KeywordGroup {

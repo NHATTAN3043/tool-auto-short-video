@@ -8,6 +8,7 @@ import {
   ElevenLabsTts,
   FfmpegAudioNormalizer,
   FfmpegClipCutter,
+  FfmpegClipFrames,
   FetchRemoteFiles,
   FfmpegMediaProbe,
   FileJobQueue,
@@ -38,6 +39,7 @@ import {
   type Env,
 } from "@studio/config";
 import {
+  makeAnalyzeClips,
   makeExportCapcut,
   makeFailStaleJobs,
   makeGenerateSceneVoices,
@@ -206,6 +208,16 @@ export function createContainer(env: Env = loadRepoEnv(REPO_ROOT), clock: Clock 
             : null,
       })
     : null;
+  // Clip analysis (ADR 0019): ffmpeg cuts library videos into shots, the AI describes them.
+  const analyzeClips = guardedAi
+    ? makeAnalyzeClips({
+        library: mediaLibrary,
+        storage,
+        frames: new FfmpegClipFrames({ ffmpegPath: env.STUDIO_FFMPEG_PATH }),
+        ai: guardedAi,
+        clock,
+      })
+    : null;
 
   return {
     env,
@@ -228,6 +240,7 @@ export function createContainer(env: Env = loadRepoEnv(REPO_ROOT), clock: Clock 
       exportCapcut,
       generateSceneVoices,
       normalizeSceneVoices,
+      analyzeClips,
       runAiTask,
       runFullAi,
       clock,

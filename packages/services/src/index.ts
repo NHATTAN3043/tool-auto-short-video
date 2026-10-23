@@ -140,6 +140,14 @@ export {
   type AddUploadToLibraryResult,
 } from "./media-search/add-upload-to-library";
 export { makeProxyStockMedia } from "./media-search/proxy-stock-media";
+export { makeAnalyzeClips, SHOT_FRAME_MAX_SIDE, type AnalyzeClipsResult } from "./clip/analyze-clips";
+export {
+  makeEstimateClipAnalysis,
+  makeRequestClipAnalysis,
+  type ClipAnalysisEstimate,
+  type ClipAnalysisInput,
+  type ClipSkipReason,
+} from "./clip/request-clip-analysis";
 export {
   makeGetBudgetSettings,
   makeGetUsageReport,

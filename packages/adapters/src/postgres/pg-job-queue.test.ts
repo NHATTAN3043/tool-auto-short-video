@@ -116,6 +116,14 @@ describe.skipIf(TEST_DATABASE_URL === undefined)("PgJobQueue", () => {
     expect((await queue.get("job_1")).fullAi).toEqual({ ...fullAi, step: "scenes", costUsd: 0.02 });
   });
 
+  it("keeps the videos and cost of a clip job (ADR 0019)", async () => {
+    const clip = { libraryIds: ["lib_1", "lib_2"], reanalyze: true, maxUsd: 0.12 };
+    await queue.enqueue({ ...job("job_1", "2026-01-01T00:00:00.000Z"), kind: "clip", clip });
+    expect((await queue.get("job_1")).clip).toEqual(clip);
+    await queue.update("job_1", { clip: { ...clip, costUsd: 0.05 } });
+    expect((await queue.get("job_1")).clip).toEqual({ ...clip, costUsd: 0.05 });
+  });
+
   it("keeps the scenes of a tts job", async () => {
     await queue.enqueue({
       ...job("job_1", "2026-01-01T00:00:00.000Z"),

@@ -154,7 +154,26 @@ describe("GuardedAi", () => {
   it("does not log free estimates", async () => {
     const s = setup();
     await s.guardedAi.estimate({ type: "script", input: scriptInput });
+    s.guardedAi.estimateShots(10);
     expect(s.log.entries).toEqual([]);
+  });
+
+  it("guards describing a clip's shots, reserving the estimate for its number of shots (ADR 0019)", async () => {
+    const s = setup();
+    const shots = [
+      { startMs: 0, endMs: 2000 },
+      { startMs: 2000, endMs: 5000 },
+    ];
+    await s.guardedAi.describeShots({ fileName: "a.mp4", durationMs: 5000, shots }, []);
+    expect(s.log.entries.map((entry) => [entry.operation, entry.status, entry.estimatedUsd])).toEqual([
+      ["describe_shots", "ok", s.ai.estimateShots(2).maxUsd],
+    ]);
+
+    const blocked = setup({ ...NO_BUDGET_LIMITS, perCallUsd: 0.000_001 });
+    await expect(
+      blocked.guardedAi.describeShots({ fileName: "a.mp4", durationMs: 5000, shots }, []),
+    ).rejects.toMatchObject({ code: "BUDGET_EXCEEDED" });
+    expect(blocked.ai.shotCalls).toEqual([]);
   });
 });
 

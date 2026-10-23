@@ -50,6 +50,13 @@
       "when": 1791718558269,
       "tag": "0006_tts_job_options",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792772762835,
+      "tag": "0007_clip_jobs",
+      "breakpoints": true
     }
   ]
 }

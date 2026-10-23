@@ -1,4 +1,4 @@
-import type { LibraryMedia } from "@studio/domain";
+import type { ClipAnalysis, LibraryMedia } from "@studio/domain";
 
 /** Metadata of the shared media library. Files live in StoragePort under `library/media/`. */
 export interface MediaLibraryRepository {
@@ -11,6 +11,8 @@ export interface MediaLibraryRepository {
   add(item: LibraryMedia): Promise<LibraryMedia>;
   /** Throws LIBRARY_MEDIA_NOT_FOUND. */
   setTags(id: string, tags: readonly string[]): Promise<LibraryMedia>;
+  /** Replaces the shots of a video (ADR 0019). Throws LIBRARY_MEDIA_NOT_FOUND. */
+  setAnalysis(id: string, analysis: ClipAnalysis): Promise<LibraryMedia>;
   /** Throws LIBRARY_MEDIA_NOT_FOUND. */
   incrementUsage(id: string): Promise<LibraryMedia>;
   /** Throws LIBRARY_MEDIA_NOT_FOUND. */

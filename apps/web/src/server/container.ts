@@ -53,6 +53,8 @@ import {
   makeGetProject,
   makeGetRenderJob,
   makeAddUploadToLibrary,
+  makeEstimateClipAnalysis,
+  makeRequestClipAnalysis,
   makeImportAsset,
   makeImportCandidate,
   makeListLibraryMedia,
@@ -218,6 +220,13 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}) {
     // AI runs in the worker; the server only estimates (free token count), queues and reads results.
     estimateAiTask: aiDeps ? makeEstimateAiTask(aiDeps) : null,
     requestAiTask: aiDeps ? makeRequestAiTask(aiDeps) : null,
+    /** Clip analysis (ADR 0019); null without an AI key, so the UI hides it. */
+    estimateClipAnalysis: ai
+      ? makeEstimateClipAnalysis({ repo, library: mediaLibrary, ai, costGuard })
+      : null,
+    requestClipAnalysis: ai
+      ? makeRequestClipAnalysis({ repo, library: mediaLibrary, ai, costGuard, queue, clock })
+      : null,
     getAiResult: ai ? makeGetAiResult({ queue, storage }) : null,
     // Full AI runs in the worker too (ADR 0010); the server estimates, queues and reads the result.
     estimateFullAi: fullAiDeps ? makeEstimateFullAi(fullAiDeps) : null,

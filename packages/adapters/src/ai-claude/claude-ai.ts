@@ -6,6 +6,7 @@ import type {
   AiUsage,
   BriefQuestionsRequest,
   BriefQuestionsSuggestion,
+  DescribeShotsRequest,
   MediaRankingSuggestion,
   MediaRankRequest,
   ScenePlanRequest,
@@ -16,6 +17,7 @@ import type {
   ScriptOutlineSuggestion,
   ScriptRequest,
   ScriptSuggestion,
+  ShotDescriptions,
   SkillGuidance,
   VisualPlanRequest,
   VisualPlansSuggestion,
@@ -41,6 +43,10 @@ import {
   ScenesOutputSchema,
   scriptPrompt,
   ScriptOutputSchema,
+  shotLabel,
+  shotsIntro,
+  ShotsOutputSchema,
+  SHOTS_SYSTEM_PROMPT,
   systemPrompt,
   toVisualPlan,
   visualPrompt,
@@ -68,6 +74,22 @@ const FORMAT_OVERHEAD_TOKENS = 400;
  * Stock thumbnails vary from tiny previews to full-size video posters: the worst case caps the estimate.
  */
 export const IMAGE_TOKENS = { expected: 500, max: 1600 } as const;
+
+/**
+ * Shot stills are at most 480px on their longest side (270×480 for a portrait clip): ~175 tokens, at most
+ * 480×480/750 ≈ 310 for a square one.
+ */
+export const SHOT_IMAGE_TOKENS = { expected: 180, max: 310 } as const;
+/** The `Shot N (…):` label before each still. */
+const SHOT_LABEL_TOKENS = 15;
+/** One sentence and a dozen keywords per shot. */
+const SHOT_OUTPUT_TOKENS = 110;
+
+/** `max_tokens` and typical output of describing `shotCount` shots, thinking included. */
+export function shotsOutputBudget(shotCount: number): { max: number; expected: number } {
+  const expected = shotCount * SHOT_OUTPUT_TOKENS + 600;
+  return { max: Math.min(32_000, Math.max(3000, expected * 2)), expected };
+}
 
 /** Vietnamese takes roughly one token per 2.5 characters; only used to size `max_tokens` and estimates. */
 export function approxTokens(text: string): number {
@@ -241,6 +263,52 @@ export class ClaudeAi implements AiPort {
     };
   }
 
+  estimateShots(shotCount: number): AiEstimate {
+    // No counting call: the prompt is short and fixed, the stills are what costs.
+    const text =
+      approxTokens(SHOTS_SYSTEM_PROMPT) + 200 + FORMAT_OVERHEAD_TOKENS + shotCount * SHOT_LABEL_TOKENS;
+    const budget = shotsOutputBudget(shotCount);
+    return {
+      inputTokens: text + shotCount * SHOT_IMAGE_TOKENS.max,
+      expectedOutputTokens: budget.expected,
+      maxOutputTokens: budget.max,
+      expectedUsd: this.usd(text + shotCount * SHOT_IMAGE_TOKENS.expected, budget.expected),
+      maxUsd: this.usd(text + shotCount * SHOT_IMAGE_TOKENS.max, budget.max),
+    };
+  }
+
+  async describeShots(
+    input: DescribeShotsRequest,
+    frames: readonly RankImage[],
+  ): Promise<AiCall<ShotDescriptions>> {
+    if (frames.length !== input.shots.length) {
+      throw new AiCallError(
+        "AI_FAILED",
+        `${String(frames.length)} ảnh cho ${String(input.shots.length)} đoạn`,
+      );
+    }
+    // Each still right after its label, so the model cannot mix up which picture is which shot.
+    const content: Anthropic.ContentBlockParam[] = [{ type: "text", text: shotsIntro(input) }];
+    for (const [index, shot] of input.shots.entries()) {
+      content.push({ type: "text", text: shotLabel(shot, index) });
+      const frame = frames[index];
+      if (frame) content.push(imageBlock(frame));
+    }
+    return this.send(
+      { maxTokens: shotsOutputBudget(input.shots.length).max, system: SHOTS_SYSTEM_PROMPT, content },
+      ShotsOutputSchema,
+      // Numbers from 1 back to positions; the domain refuses an answer that misses or repeats a shot.
+      (data) => ({
+        shots: data.shots.map(({ shotNumber, description, tagsEn, tagsVi, textOverlay }) => ({
+          index: shotNumber - 1,
+          description,
+          tags: [...tagsEn, ...tagsVi],
+          textOverlay,
+        })),
+      }),
+    );
+  }
+
   async generateScript(input: ScriptRequest, guidance?: SkillGuidance): Promise<AiCall<ScriptSuggestion>> {
     return this.run({ type: "script", input }, ScriptOutputSchema, (data) => data, { guidance });
   }
@@ -353,15 +421,27 @@ export class ClaudeAi implements AiPort {
       content = userPrompt(task, guidance),
     }: { guidance?: SkillGuidance; content?: UserContent } = {},
   ): Promise<AiCall<T>> {
+    return this.send(
+      { maxTokens: outputBudget(task).max, system: systemPrompt(task, guidance), content },
+      schema,
+      map,
+    );
+  }
+
+  private async send<S extends z.ZodType, T>(
+    request: { maxTokens: number; system: string; content: UserContent },
+    schema: S,
+    map: (data: z.infer<S>) => T,
+  ): Promise<AiCall<T>> {
     const format = zodOutputFormat(schema);
     let response: Anthropic.Message;
     try {
       response = await this.withRetry(() =>
         this.client.messages.create({
           model: this.model,
-          max_tokens: outputBudget(task).max,
-          system: systemPrompt(task, guidance),
-          messages: [{ role: "user", content }],
+          max_tokens: request.maxTokens,
+          system: request.system,
+          messages: [{ role: "user", content: request.content }],
           output_config: {
             format: { type: "json_schema", schema: format.schema },
             // Haiku 4.5 rejects `effort`; newer models think adaptively and `low` keeps that short.

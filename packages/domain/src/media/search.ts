@@ -28,7 +28,13 @@ export type MediaSearchQuery = z.infer<typeof MediaSearchQuerySchema>;
  */
 export const MediaLinkSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("remote"), url: z.url() }),
-  z.object({ type: z.literal("library"), id: z.string().min(1), file: z.enum(["thumbnail", "media"]) }),
+  z.object({
+    type: z.literal("library"),
+    id: z.string().min(1),
+    file: z.enum(["thumbnail", "media", "shot"]),
+    /** With `file: "shot"`: the still of that shot of an analyzed video (ADR 0019). */
+    shot: z.number().int().nonnegative().optional(),
+  }),
   z.object({
     type: z.literal("project"),
     projectId: z.string().min(1),

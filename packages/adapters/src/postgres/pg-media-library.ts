@@ -1,6 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 
-import { DomainError, LibraryMediaSchema, type LibraryMedia } from "@studio/domain";
+import { DomainError, LibraryMediaSchema, type ClipAnalysis, type LibraryMedia } from "@studio/domain";
 import type { MediaLibraryRepository } from "@studio/services";
 
 import { isUniqueViolation, type PgDb } from "./database";
@@ -53,6 +53,10 @@ export class PgMediaLibrary implements MediaLibraryRepository {
 
   setTags(id: string, tags: readonly string[]): Promise<LibraryMedia> {
     return this.change(id, (item) => ({ ...item, tags: [...tags] }));
+  }
+
+  setAnalysis(id: string, analysis: ClipAnalysis): Promise<LibraryMedia> {
+    return this.change(id, (item) => ({ ...item, analysis }));
   }
 
   incrementUsage(id: string): Promise<LibraryMedia> {

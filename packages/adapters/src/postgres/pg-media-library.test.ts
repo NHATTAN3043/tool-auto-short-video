@@ -1,4 +1,4 @@
-import { uploadSourceRef, type LibraryMedia } from "@studio/domain";
+import { uploadSourceRef, type ClipAnalysis, type LibraryMedia } from "@studio/domain";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import type { PgDatabase } from "./database";
@@ -72,6 +72,17 @@ describe.skipIf(TEST_DATABASE_URL === undefined)("PgMediaLibrary", () => {
     await library.add(upload);
     expect(await library.findBySourceRef("upload:sha256:lib_up")).toEqual(upload);
     expect(await library.get("lib_up")).toEqual(upload);
+
+    const reanalyzed: ClipAnalysis = {
+      shots: [{ index: 0, startMs: 0, endMs: 6000, description: "Mèo", tags: ["cat"], textOverlay: false }],
+      model: "claude-opus-5-5",
+      analyzedAt: "2026-10-24T00:00:00.000Z",
+    };
+    expect((await library.setAnalysis("lib_up", reanalyzed)).analysis).toEqual(reanalyzed);
+    expect((await library.get("lib_up")).analysis).toEqual(reanalyzed);
+    await expect(library.setAnalysis("lib_gone", reanalyzed)).rejects.toMatchObject({
+      code: "LIBRARY_MEDIA_NOT_FOUND",
+    });
   });
 
   it("sets tags, counts concurrent uses and removes", async () => {

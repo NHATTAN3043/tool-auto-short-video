@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { AiJobInfoSchema } from "../ai/schema";
 import { FullAiJobInfoSchema } from "../full-ai/schema";
+import { ClipJobInfoSchema } from "../media/clip-analysis";
 
 export const RenderJobStatusSchema = z.enum(["QUEUED", "PROCESSING", "COMPLETED", "FAILED", "CANCELLED"]);
 export type RenderJobStatus = z.infer<typeof RenderJobStatusSchema>;
@@ -11,8 +12,9 @@ export type RenderJobStatus = z.infer<typeof RenderJobStatusSchema>;
  * `tts`: generates the voices of `sceneIds`; it has no output file.
  * `ai`: runs `ai.task`; `outputPath` is the JSON suggestion for the user to review.
  * `full_ai`: runs the Full AI steps on the project; `outputPath` is the ranked media for the review screen.
+ * `clip`: cuts shared library videos into shots and has AI describe them (ADR 0019); no output file.
  */
-export const RenderJobKindSchema = z.enum(["video", "capcut", "tts", "ai", "full_ai"]);
+export const RenderJobKindSchema = z.enum(["video", "capcut", "tts", "ai", "full_ai", "clip"]);
 export type RenderJobKind = z.infer<typeof RenderJobKindSchema>;
 
 export const TtsJobOptionsSchema = z.object({
@@ -36,6 +38,8 @@ export const RenderJobSchema = z.object({
   ai: AiJobInfoSchema.optional(),
   /** Request, steps and cost of a `full_ai` job. */
   fullAi: FullAiJobInfoSchema.optional(),
+  /** Videos, cost reservation and real cost of a `clip` job. */
+  clip: ClipJobInfoSchema.optional(),
   status: RenderJobStatusSchema,
   /** 0..1 */
   progress: z.number().min(0).max(1),

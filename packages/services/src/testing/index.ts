@@ -2,6 +2,7 @@ export {
   FakeAi,
   FakeArchive,
   FakeAudioNormalizer,
+  FakeClipFrames,
   FakeClipCutter,
   FakeCostGuard,
   FakeClock,

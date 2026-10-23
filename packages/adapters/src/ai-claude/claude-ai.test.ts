@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { MediaRankRequest } from "@studio/domain";
 
-import { ClaudeAi, IMAGE_TOKENS, outputBudget } from "./claude-ai";
+import { ClaudeAi, IMAGE_TOKENS, outputBudget, SHOT_IMAGE_TOKENS, shotsOutputBudget } from "./claude-ai";
 
 type Reply = () => Response;
 
@@ -358,5 +358,70 @@ describe("ClaudeAi", () => {
       outputBudget({ type: "script_outline", input: { ...scriptInput, targetDurationSec: 180, answers: [] } })
         .max,
     ).toBeGreaterThan(6000);
+  });
+
+  it("describes a clip's shots: each still after its label, numbers mapped back, tags merged (ADR 0019)", async () => {
+    const s = setup([
+      message({
+        shots: [
+          { shotNumber: 2, description: "Chó chạy", tagsEn: ["dog"], tagsVi: ["chó"], textOverlay: true },
+          {
+            shotNumber: 1,
+            description: "Mèo ngủ",
+            tagsEn: ["cat sleeping"],
+            tagsVi: ["mèo ngủ"],
+            textOverlay: false,
+          },
+        ],
+      }),
+    ]);
+    const frame = (data: string) => ({ type: "base64" as const, mediaType: "image/jpeg" as const, data });
+    const input = {
+      fileName: "meo.mp4",
+      durationMs: 5000,
+      shots: [
+        { startMs: 0, endMs: 2000 },
+        { startMs: 2000, endMs: 5000 },
+      ],
+    };
+    const result = await s.ai.describeShots(input, [frame("AAA"), frame("BBB")]);
+
+    expect(result.data.shots).toEqual([
+      { index: 1, description: "Chó chạy", tags: ["dog", "chó"], textOverlay: true },
+      { index: 0, description: "Mèo ngủ", tags: ["cat sleeping", "mèo ngủ"], textOverlay: false },
+    ]);
+    const body = s.bodies()[0] ?? {};
+    expect(body.max_tokens).toBe(shotsOutputBudget(2).max);
+    expect(String(body.system)).toMatch(/lập chỉ mục/u);
+    const content = (
+      body.messages as { content: { type: string; text?: string; source?: { data: string } }[] }[]
+    )[0]?.content;
+    expect(content?.map((block) => block.type)).toEqual(["text", "text", "image", "text", "image"]);
+    expect(content?.[0]?.text).toMatch(/meo\.mp4.*2 đoạn/su);
+    expect(content?.[1]?.text).toBe("Shot 1 (0 giây–2 giây):");
+    expect(content?.[2]?.source?.data).toBe("AAA");
+    expect(content?.[3]?.text).toBe("Shot 2 (2 giây–5 giây):");
+    expect(content?.[4]?.source?.data).toBe("BBB");
+  });
+
+  it("refuses to describe shots without one still per shot, before any call", async () => {
+    const s = setup([]);
+    await expect(
+      s.ai.describeShots({ fileName: "a.mp4", durationMs: 2000, shots: [{ startMs: 0, endMs: 2000 }] }, []),
+    ).rejects.toMatchObject({ code: "AI_FAILED" });
+    expect(s.fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("prices shots from the size of the stills, without a counting call", () => {
+    const s = setup([]);
+    const small = s.ai.estimateShots(10);
+    const big = s.ai.estimateShots(48);
+    expect(s.fetchFn).not.toHaveBeenCalled();
+    expect(big.maxUsd).toBeGreaterThan(small.maxUsd);
+    expect(small.expectedUsd).toBeLessThan(small.maxUsd);
+    expect(big.inputTokens - small.inputTokens).toBe(38 * (SHOT_IMAGE_TOKENS.max + 15));
+    expect(big.maxOutputTokens).toBe(shotsOutputBudget(48).max);
+    // A 2-minute short of ~30 shots stays around a few US cents on Sonnet.
+    expect(s.ai.estimateShots(30).expectedUsd).toBeLessThan(0.06);
   });
 });

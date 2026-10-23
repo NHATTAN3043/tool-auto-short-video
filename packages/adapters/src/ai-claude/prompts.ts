@@ -2,6 +2,7 @@ import type {
   AiTask,
   BriefQuestionsRequest,
   ContentLanguage,
+  DescribeShotsRequest,
   MediaRankRequest,
   RankCandidate,
   ScenePlanRequest,
@@ -330,3 +331,41 @@ export function rewritePrompt(input: SceneRewriteRequest): string {
     .filter((line) => line !== "")
     .join("\n");
 }
+
+/** Clip analysis (ADR 0019): what each shot of a downloaded clip shows, to find it later by keywords. */
+export const SHOTS_SYSTEM_PROMPT = [
+  "Bạn giúp một công cụ làm video dọc ngắn (TikTok, Shorts, Reels) lập chỉ mục cho các clip người dùng tự tải về.",
+  "Mỗi clip đã được cắt thành các đoạn; mỗi đoạn có một ảnh chụp ở giữa đoạn. Bạn mô tả từng đoạn để sau này tìm",
+  "đúng đoạn cho một cảnh bằng từ khoá. Chỉ mô tả những gì nhìn thấy, không đoán câu chuyện của clip.",
+].join("\n");
+
+export const ShotsOutputSchema = z.object({
+  shots: z.array(
+    z.object({
+      shotNumber: z.number().int().describe("Số của đoạn, đúng như nhãn Shot N đứng trước ảnh"),
+      description: z
+        .string()
+        .describe("Một câu tiếng Việt, tối đa 25 từ: chủ thể, hành động, bối cảnh, góc máy"),
+      tagsEn: z
+        .array(z.string())
+        .describe("3-6 từ khoá tiếng Anh ngắn để tìm kho stock (chủ thể, hành động, bối cảnh)"),
+      tagsVi: z.array(z.string()).describe("3-6 từ khoá tiếng Việt cùng nghĩa"),
+      textOverlay: z
+        .boolean()
+        .describe("true nếu trên hình có chữ in sẵn, phụ đề, logo hoặc watermark của kênh khác"),
+    }),
+  ),
+});
+
+/** The text before the stills: what the clip is and how to answer. */
+export function shotsIntro(input: DescribeShotsRequest): string {
+  return [
+    `Clip "${input.fileName}", dài ${seconds(input.durationMs)}, đã cắt thành ${String(input.shots.length)} đoạn.`,
+    "Mỗi ảnh dưới đây đứng sau nhãn Shot N (thời gian của đoạn trong clip).",
+    `Mô tả đủ cả ${String(input.shots.length)} đoạn, mỗi đoạn đúng một lần, giữ đúng số Shot N.`,
+    "Logo nhỏ của kênh ở góc vẫn tính là textOverlay; viền đen hay nền mờ thì không.",
+  ].join("\n");
+}
+
+export const shotLabel = (shot: DescribeShotsRequest["shots"][number], index: number) =>
+  `Shot ${String(index + 1)} (${seconds(shot.startMs)}–${seconds(shot.endMs)}):`;

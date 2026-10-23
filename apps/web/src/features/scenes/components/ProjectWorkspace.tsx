@@ -328,7 +328,7 @@ export function ProjectWorkspace({
                 assets={editor.project.assets}
                 onUploaded={editor.assetAdded}
               />
-              <SharedMediaLibrary />
+              <SharedMediaLibrary projectId={editor.project.id} aiAvailable={aiAvailable} />
               <SfxLibraryPanel library={sfxLibrary} />
             </TabPanel>
 

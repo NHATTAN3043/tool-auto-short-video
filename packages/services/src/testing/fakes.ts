@@ -24,6 +24,8 @@ import {
   type PlannedSpend,
   type UsageFilter,
   type AiUsage,
+  type ClipAnalysis,
+  type DescribeShotsRequest,
   type LibraryMedia,
   type LibrarySfx,
   type MediaCandidate,
@@ -39,6 +41,7 @@ import {
   type ScriptRequest,
   type ScriptSuggestion,
   type SkillGuidance,
+  type ShotDescriptions,
   type SkillSummary,
   type VisualPlanRequest,
   type VisualPlansSuggestion,
@@ -49,6 +52,7 @@ import type { AiCall, AiCallError, AiEstimate, AiPort, RankImage } from "../port
 import type { ArchiveEntry, ArchivePort } from "../ports/archive";
 import type { AudioNormalizerPort } from "../ports/audio-normalizer";
 import type { ClipCutterPort, ClipRange } from "../ports/clip-cutter";
+import type { ClipFramesPort, GrabFramesOptions } from "../ports/clip-frames";
 import type { Clock } from "../ports/clock";
 import type { ApiUsageLog, BudgetSettingsStore, CostGuardPort, GuardedRun } from "../ports/cost-guard";
 import type { JobFilter, JobQueuePort, RenderJobPatch } from "../ports/job-queue";
@@ -363,6 +367,43 @@ export class FakeClipCutter implements ClipCutterPort {
 }
 
 /** Copies the input to the output with a `norm:` prefix, so tests can tell a normalized file apart. */
+/**
+ * Finds the cuts set in `cuts` and writes a small JPEG per requested time into the in-memory storage, named
+ * like the real adapter. `failOn` makes detectCuts throw for paths that contain it.
+ */
+export class FakeClipFrames implements ClipFramesPort {
+  cuts: number[] = [];
+  failOn: string | null = null;
+  readonly grabbed: { input: string; atMs: readonly number[]; outDir: string; options: GrabFramesOptions }[] =
+    [];
+
+  constructor(private readonly storage: InMemoryStorage) {}
+
+  detectCuts(absoluteInput: string): Promise<number[]> {
+    if (this.failOn !== null && absoluteInput.includes(this.failOn)) {
+      return Promise.reject(new Error(`ffmpeg failed: ${absoluteInput}`));
+    }
+    return Promise.resolve([...this.cuts]);
+  }
+
+  async grabFrames(
+    absoluteInput: string,
+    atMs: readonly number[],
+    absoluteOutDir: string,
+    options: GrabFramesOptions,
+  ): Promise<string[]> {
+    this.grabbed.push({ input: absoluteInput, atMs, outDir: absoluteOutDir, options });
+    const folder = this.storage.keyOf(absoluteOutDir);
+    const written: string[] = [];
+    for (const [i] of atMs.entries()) {
+      const key = `${folder}/frame-${String(i).padStart(3, "0")}.jpg`;
+      await this.storage.write(key, oneChunk(new Uint8Array([0xff, 0xd8, i])));
+      written.push(this.storage.resolvePath(key));
+    }
+    return written;
+  }
+}
+
 export class FakeAudioNormalizer implements AudioNormalizerPort {
   readonly runs: { input: string; output: string }[] = [];
   failWith: Error | null = null;
@@ -558,6 +599,41 @@ export class FakeAi implements AiPort {
     return this.answer({ type: "script_outline", input }, this.outline, guidance);
   }
 
+  /** Requests and stills received by each describeShots call. */
+  readonly shotCalls: { input: DescribeShotsRequest; frames: readonly RankImage[] }[] = [];
+  /** Replaces the default answer (every shot described in order) when set. */
+  shotAnswer: ((input: DescribeShotsRequest) => ShotDescriptions) | null = null;
+  /** USD per shot of the estimate, so tests can tell a big clip from a small one. */
+  shotEstimateUsd = 0.001;
+
+  estimateShots(shotCount: number): AiEstimate {
+    const usd = shotCount * this.shotEstimateUsd;
+    return {
+      inputTokens: shotCount * 200,
+      expectedOutputTokens: shotCount * 80,
+      maxOutputTokens: shotCount * 160,
+      expectedUsd: usd,
+      maxUsd: usd * 2,
+    };
+  }
+
+  describeShots(
+    input: DescribeShotsRequest,
+    frames: readonly RankImage[],
+  ): Promise<AiCall<ShotDescriptions>> {
+    this.shotCalls.push({ input, frames });
+    if (this.failWith) return Promise.reject(this.failWith);
+    const data = this.shotAnswer?.(input) ?? {
+      shots: input.shots.map((_, index) => ({
+        index,
+        description: `Đoạn ${String(index)} của ${input.fileName}`,
+        tags: [`shot ${String(index)}`],
+        textOverlay: false,
+      })),
+    };
+    return Promise.resolve({ data, usage: this.usage });
+  }
+
   generateVisualPlans(
     input: VisualPlanRequest,
     guidance?: SkillGuidance,
@@ -654,6 +730,10 @@ export class InMemoryMediaLibrary implements MediaLibraryRepository {
 
   setTags(id: string, tags: readonly string[]): Promise<LibraryMedia> {
     return this.change(id, { tags: [...tags] });
+  }
+
+  setAnalysis(id: string, analysis: ClipAnalysis): Promise<LibraryMedia> {
+    return this.change(id, { analysis });
   }
 
   incrementUsage(id: string): Promise<LibraryMedia> {

@@ -27,20 +27,29 @@ export function makeRemoveLibraryMedia(deps: { library: MediaLibraryRepository; 
     await deps.library.remove(id);
     await deps.storage.remove(libraryMediaKey(item.path));
     if (item.thumbnailPath) await deps.storage.remove(libraryMediaKey(item.thumbnailPath));
+    // Stills of the item's shots (ADR 0019), from every analysis.
+    await deps.storage.removeFolder(libraryMediaKey(`shots/${id}`));
   };
 }
 
 async function* nothing(): AsyncIterable<Uint8Array> {}
 
-/** Streams a library file or its thumbnail for the browser, with HTTP Range support. */
+/** Streams a library file, its thumbnail or a shot's still for the browser, with HTTP Range support. */
 export function makeReadLibraryMediaFile(deps: { library: MediaLibraryRepository; storage: StoragePort }) {
   return async (input: {
     id: string;
-    file: "media" | "thumbnail";
+    file: "media" | "thumbnail" | "shot";
+    /** With `file: "shot"`: which shot's still. */
+    shot?: number;
     range?: string | null;
   }): Promise<ReadProjectFileResult> => {
     const item = await deps.library.get(input.id);
-    const relative = input.file === "thumbnail" ? item.thumbnailPath : item.path;
+    const relative =
+      input.file === "thumbnail"
+        ? item.thumbnailPath
+        : input.file === "shot"
+          ? item.analysis?.shots[input.shot ?? -1]?.thumbnailPath
+          : item.path;
     if (relative === undefined) throw new DomainError("FILE_NOT_FOUND", "File not found");
     const key = libraryMediaKey(relative);
     const info = await deps.storage.stat(key).catch(() => null);

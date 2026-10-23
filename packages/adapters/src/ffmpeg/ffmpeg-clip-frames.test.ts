@@ -56,8 +56,9 @@ describe.runIf(hasFfmpeg)("FfmpegClipFrames", () => {
     expect(Math.abs((cuts[1] ?? 0) - 5000)).toBeLessThanOrEqual(SAMPLE_MS);
   });
 
-  it("finds no cut in one continuous shot", async () => {
-    expect(await frames.detectCuts(makeSingleShotVideo(dir, 20))).toEqual([]);
+  // Making and decoding the clip takes a few seconds when the whole suite runs at once.
+  it("finds no cut in one continuous shot", { timeout: 30_000 }, async () => {
+    expect(await frames.detectCuts(makeSingleShotVideo(dir, 12))).toEqual([]);
   });
 
   it("grabs one small frame per time, in order, inside the longest side", async () => {

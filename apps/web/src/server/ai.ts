@@ -1,6 +1,6 @@
 import "server-only";
 
-import { AiTaskSchema, DomainError, FullAiRequestSchema } from "@studio/domain";
+import { AiTaskSchema, DomainError, FullAiRequestSchema, MAX_CLIPS_PER_JOB } from "@studio/domain";
 import { z } from "zod";
 
 /** AI services are null without ANTHROPIC_API_KEY; their routes then answer AI_UNAVAILABLE (404). */
@@ -14,3 +14,9 @@ export const AiTaskBodySchema = z.object({ task: AiTaskSchema });
 
 /** Body of the Full AI estimate and job routes. */
 export const FullAiBodySchema = z.object({ request: FullAiRequestSchema });
+
+/** Body of the clip analysis estimate and job routes (ADR 0019). */
+export const ClipAnalysisBodySchema = z.object({
+  libraryIds: z.array(z.string().min(1)).min(1).max(MAX_CLIPS_PER_JOB),
+  reanalyze: z.boolean().optional(),
+});

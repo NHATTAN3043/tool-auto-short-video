@@ -24,6 +24,7 @@ export const KIND_LABELS: Record<RenderJobKind, string> = {
   tts: "Tạo giọng",
   ai: "Gợi ý AI",
   full_ai: "Full AI",
+  clip: "Phân tích clip",
 };
 
 /** Render panel jobs only: video and CapCut, not voice generation or AI suggestions. */

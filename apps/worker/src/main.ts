@@ -21,8 +21,14 @@ while (!controller.signal.aborted) {
   try {
     const job = await container.runNextRenderJob();
     if (job) {
-      const cost = job.ai?.costUsd === undefined ? "" : ` (${job.ai.costUsd.toFixed(4)} USD)`;
-      const done = job.kind === "tts" ? "voices done" : `done → ${job.outputPath ?? ""}${cost}`;
+      const costUsd = job.ai?.costUsd ?? job.clip?.costUsd;
+      const cost = costUsd === undefined ? "" : ` (${costUsd.toFixed(4)} USD)`;
+      const done =
+        job.kind === "tts"
+          ? "voices done"
+          : job.kind === "clip"
+            ? `clips analyzed${cost}`
+            : `done → ${job.outputPath ?? ""}${cost}`;
       const outcome = job.status === "COMPLETED" ? done : `failed: ${job.errorMessage ?? ""}`;
       console.warn(`[worker] ${job.id} (${job.projectId}) ${outcome}`);
       continue;

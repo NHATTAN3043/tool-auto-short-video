@@ -1,6 +1,7 @@
 import type { RenderJob } from "@studio/domain";
 
 import type { RunAiTaskResult } from "../ai/run-ai-task";
+import type { AnalyzeClipsResult } from "../clip/analyze-clips";
 import type { RunFullAiInput, RunFullAiResult } from "../full-ai/run-full-ai";
 import type { Clock } from "../ports/clock";
 import type { JobQueuePort, RenderJobPatch } from "../ports/job-queue";
@@ -21,13 +22,18 @@ export interface RunNextRenderJobDeps {
   runAiTask?: ((job: RenderJob) => Promise<RunAiTaskResult>) | null;
   /** Null when no AI provider is configured; `full_ai` jobs then fail with a clear message. */
   runFullAi?: ((input: RunFullAiInput) => Promise<RunFullAiResult>) | null;
+  /** Null when no AI provider is configured; `clip` jobs then fail with a clear message. */
+  analyzeClips?:
+    | ((input: { job: RenderJob; onProgress?: (progress: number) => void }) => Promise<AnalyzeClipsResult>)
+    | null;
   clock: Clock;
   /** Progress is persisted at most this often, so a render does not hammer the disk. */
   progressIntervalMs?: number;
 }
 
 /**
- * Claims the oldest queued job and runs it (video, CapCut package, scene voices or AI task, by `kind`). Returns the finished
+ * Claims the oldest queued job and runs it (video, CapCut package, scene voices, AI task, Full AI or clip
+ * analysis, by `kind`). Returns the finished
  * job, or null when nothing is queued.
  */
 export function makeRunNextRenderJob(deps: RunNextRenderJobDeps) {
@@ -59,6 +65,11 @@ export function makeRunNextRenderJob(deps: RunNextRenderJobDeps) {
       if (job.kind === "ai") return await runAi(job);
       if (job.kind === "full_ai") {
         const done = await runFullAi(job, onProgress, write);
+        await pendingWrite;
+        return await deps.queue.update(job.id, done);
+      }
+      if (job.kind === "clip") {
+        const done = await runClips(job, onProgress);
         await pendingWrite;
         return await deps.queue.update(job.id, done);
       }
@@ -138,6 +149,23 @@ export function makeRunNextRenderJob(deps: RunNextRenderJobDeps) {
     return result.ok
       ? { ...common, status: "COMPLETED", progress: 1, outputPath: result.outputPath }
       : { ...common, status: "FAILED", errorMessage: result.message };
+  }
+
+  /** Runs a clip analysis job and returns its final patch. Clips analyzed before a failure stay analyzed. */
+  async function runClips(job: RenderJob, onProgress: (progress: number) => void): Promise<RenderJobPatch> {
+    if (!deps.analyzeClips) throw new Error("Chưa cấu hình dịch vụ AI (ANTHROPIC_API_KEY) cho worker");
+    const result = await deps.analyzeClips({ job, onProgress });
+    // The real cost replaces the reservation, also for failed calls the provider still billed.
+    const clip = job.clip ? { ...job.clip, costUsd: result.costUsd } : undefined;
+    const common = { completedAt: deps.clock.now(), ...(clip && { clip }) };
+    if (result.failed.length === 0) return { ...common, status: "COMPLETED", progress: 1 };
+    const first = result.failed[0]?.message ?? "";
+    const total = String(job.clip?.libraryIds.length ?? 0);
+    return {
+      ...common,
+      status: "FAILED",
+      errorMessage: `Không phân tích được ${String(result.failed.length)}/${total} video: ${first}`,
+    };
   }
 
   async function runVoices(job: RenderJob, onProgress: (progress: number) => void): Promise<void> {

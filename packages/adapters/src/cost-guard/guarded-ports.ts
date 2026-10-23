@@ -3,6 +3,7 @@ import type {
   BriefQuestionsRequest,
   BriefQuestionsSuggestion,
   ContentLanguage,
+  DescribeShotsRequest,
   MediaRankingSuggestion,
   MediaRankRequest,
   ScenePlanRequest,
@@ -13,6 +14,7 @@ import type {
   ScriptOutlineSuggestion,
   ScriptRequest,
   ScriptSuggestion,
+  ShotDescriptions,
   SkillGuidance,
   VisualPlanRequest,
   VisualPlansSuggestion,
@@ -130,6 +132,19 @@ export class GuardedAi implements AiPort {
     );
   }
 
+  /** Free: worked out from sizes; not logged. */
+  estimateShots(shotCount: number): AiEstimate {
+    return this.inner.estimateShots(shotCount);
+  }
+
+  describeShots(
+    input: DescribeShotsRequest,
+    frames: readonly RankImage[],
+  ): Promise<AiCall<ShotDescriptions>> {
+    const { maxUsd } = this.inner.estimateShots(input.shots.length);
+    return this.guarded("describe_shots", maxUsd, () => this.inner.describeShots(input, frames));
+  }
+
   private async run<T>(
     task: AiTask,
     call: () => Promise<AiCall<T>>,
@@ -137,13 +152,17 @@ export class GuardedAi implements AiPort {
   ): Promise<AiCall<T>> {
     // The worst case is the request's max_tokens, so the real cost can never exceed it.
     const { maxUsd } = await this.inner.estimate(task, guidance);
+    return this.guarded(task.type, maxUsd, call);
+  }
+
+  private guarded<T>(operation: string, maxUsd: number, call: () => Promise<AiCall<T>>): Promise<AiCall<T>> {
     return this.guard.guard({
       call: {
         ...this.context,
         service: "ai",
         provider: this.id,
         model: this.model,
-        operation: task.type,
+        operation,
         maxUsd,
       },
       run: call,

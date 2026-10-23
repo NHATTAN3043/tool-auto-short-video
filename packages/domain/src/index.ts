@@ -23,6 +23,7 @@ export { parseByteRange, type ByteRange } from "./media/byte-range";
 export { addAsset, findMissingAssetIds } from "./media/operations";
 export * from "./media/sfx-library";
 export * from "./media/clip-analysis";
+export * from "./media/shot-descriptions";
 export * from "./media/media-library";
 export * from "./media/search";
 export { NARRATION_KEYWORDS_MAX, narrationKeywords } from "./media/narration-keywords";

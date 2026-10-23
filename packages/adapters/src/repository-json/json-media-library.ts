@@ -7,6 +7,7 @@ import {
   LibraryMediaSchema,
   MEDIA_LIBRARY_SCHEMA_VERSION,
   MediaLibrarySchema,
+  type ClipAnalysis,
   type LibraryMedia,
   type MediaLibrary,
 } from "@studio/domain";
@@ -58,6 +59,10 @@ export class JsonMediaLibrary implements MediaLibraryRepository {
 
   setTags(id: string, tags: readonly string[]): Promise<LibraryMedia> {
     return this.change(id, (item) => ({ ...item, tags: [...tags] }));
+  }
+
+  setAnalysis(id: string, analysis: ClipAnalysis): Promise<LibraryMedia> {
+    return this.change(id, (item) => ({ ...item, analysis }));
   }
 
   incrementUsage(id: string): Promise<LibraryMedia> {
