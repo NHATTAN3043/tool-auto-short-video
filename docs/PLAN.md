@@ -419,6 +419,27 @@ logo động, nhiều logo, chữ watermark.
 **Tiêu chí xong:** dự án có logo ở góc trên trái thì preview và file MP4 render ra có cùng vòng tròn logo ở cùng vị
 trí, suốt video; dự án cũ không có logo vẫn mở và render như trước.
 
+### Bổ sung — Nghỉ lấy hơi giữa các cảnh (ADR 0018)
+
+**Phạm vi:** cảnh có giọng riêng được cộng thêm khoảng nghỉ `style.scenePauseMs` theo dấu câu (đủ mức sau `. ! ? …`, 2/3
+khi câu còn tiếp); phụ đề chia theo phần có tiếng và giữ câu cuối qua khoảng nghỉ; dự án mới mặc định 300ms, dự án cũ
+không đổi; thanh trượt "Nghỉ giữa các cảnh" 0–1s. **Không làm:** đo khoảng lặng có sẵn trong file giọng, nghỉ riêng từng
+cảnh (thời lượng tay đã làm được việc đó).
+
+**Tiêu chí xong:** hai cảnh Full AI liền nhau có chỗ lấy hơi mà không phải nhập tay thời lượng.
+
+### Bổ sung — Phân tích clip tự tải và báo cảnh thiếu (ADR 0019)
+
+**Phạm vi:** video upload trong dự án tự vào kho chung (một lần mỗi file); nút "Phân tích" (có phí, xác nhận chi phí)
+cắt video thành đoạn bằng ffmpeg và nhờ Claude mô tả từng đoạn; Full AI và ô tìm media tìm theo đoạn, gán đúng
+`sourceStartMs`, không dùng một đoạn hai lần, đoạn có chữ/logo xếp sau kèm cảnh báo; màn duyệt có khung "Cảnh thiếu"
+kèm từ khoá; màn chạy Full AI nhắc video chưa phân tích. Kế hoạch và nhật ký kiểm thử: `docs/plans/clip-analysis.md`.
+**Không làm:** tạo ảnh/video bằng AI, tải video từ link TikTok/YouTube, xoá watermark, trang "Kho clip" riêng, viết
+script từ footage.
+
+**Tiêu chí xong:** clip 2 phút tên vô nghĩa, sau khi phân tích, được Full AI dùng đúng đoạn khớp lời cho một cảnh và
+bắt đầu đúng chỗ; cảnh không tìm được hình hiện trong "Cảnh thiếu" với từ khoá dùng được.
+
 ---
 
 ## 4. Sau V1 (chỉ khi POC chứng minh giá trị)

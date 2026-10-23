@@ -195,3 +195,27 @@ Trong môi trường thử, video 14 giây mất khoảng 2 phút để render, 
 - Từ chối (`PROJECT_BUSY`, 409) khi có job `QUEUED`/`PROCESSING`: worker đang chạy sẽ ghi file lại vào thư mục vừa xoá.
 - Autosave của editor sau khi xoá không tạo lại dự án: `saveProject` dùng `repo.update`, vốn báo `PROJECT_NOT_FOUND`.
 - Log `api_usage` không có khoá ngoại tới `projects` (ADR 0009); trang Ngân sách hiện "Dự án đã xoá".
+
+## 11. Nghỉ giữa các cảnh (ADR 0018)
+
+- ElevenLabs với `previous_text`/`next_text` trả file gần như không có lặng cuối, nên hai cảnh nối thẳng thì đọc dính
+  liền. Khoảng nghỉ nằm trên timeline (`TimelineEntry.pauseMs`), file giọng không bị đệm; phụ đề phải chia theo
+  `durationMs - pauseMs`, nếu không chữ chạy trước giọng.
+
+## 12. Phân tích clip (ADR 0019)
+
+- **Fade làm `scdet` bỏ sót cảnh.** Short thành phẩm chuyển cảnh bằng mờ dần: hai khung liền nhau ở 30fps chỉ lệch
+  điểm < 6, ngưỡng 10 bắt được 0–9 chỗ cắt trên clip 2 phút có ~25 cảnh. Lọc `fps=4` trước `scdet` (so khung cách
+  250ms) rồi ngưỡng 5 bắt 23/24. Thời điểm cắt vì vậy chính xác tới ±250ms.
+- **4K HEVC giải mã chậm** (~40–55s cho 2 phút). `-hwaccel auto -skip_frame noref` còn ~24s, cùng kết quả;
+  `-hwaccel auto` một mình lại chậm hơn. Chụp ảnh từng đoạn bằng `-ss` trước `-i` tốn ~1s/ảnh trên 4K (giải mã từ
+  keyframe, mỗi 5s); GPU không giúp. Đo tốc độ chụp phải lấy thời điểm lệch keyframe, nếu không sẽ thấy nhanh giả.
+- **`drawtext` crash (segfault) khi máy không có cấu hình fontconfig** (bản ffmpeg build sẵn trên Windows). Đừng in số
+  lên ảnh cho AI; gửi chữ "Shot N" thành block text ngay trước ảnh.
+- Thứ tự đoạn là hợp đồng giữa ffmpeg, ảnh và câu trả lời của AI: `grabFrames` ghi `frame-000.jpg`… theo đúng thứ tự
+  thời điểm, service suy ra key từ tên đó (`StoragePort` không đổi đường dẫn tuyệt đối về key được).
+- Mỗi lần phân tích ghi ảnh vào thư mục theo job; chỉ sau khi `setAnalysis` thành công mới xoá thư mục của lần
+  trước, để ảnh đang được dùng không bao giờ mất giữa chừng.
+- `MediaCandidate` nhiều đoạn cùng clip có chung `provider`/`ref`: React key, chống trùng và danh sách đã dùng phải
+  dùng `candidateKey` (có `#n`), không dùng `provider:ref`.
+- Xem thử một đoạn bằng media fragment `…/file?file=media#t=<start>,<end>` (giây); trình duyệt tự dừng ở `end`.

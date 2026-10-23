@@ -1,6 +1,6 @@
 # Kế hoạch triển khai — Phân tích clip tự tải và báo cảnh thiếu
 
-**Trạng thái:** đang làm (P1–P6 xong, còn P7 tài liệu) · ADR dự kiến: 0019 · Bổ sung cho ADR 0008 (thư viện chung), 0010 (Full AI), 0016 (file upload)
+**Trạng thái:** xong (P1–P7) · ADR 0019 · ADR dự kiến: 0019 · Bổ sung cho ADR 0008 (thư viện chung), 0010 (Full AI), 0016 (file upload)
 
 ## Mục tiêu
 
@@ -257,3 +257,4 @@ grabFrames(path, atMs[], outDir, { maxSide }) }`.
 | P4   | 2026-10-23 | Đạt: 915 test (thêm 33); migration 0007 đã chạy trên DB thật; chạy thật 5 clip qua CostGuard + Claude Sonnet: 5/5 thành công, 138 đoạn, ước tính 0,253 → thật 0,262 USD (~0,05 USD/clip 2 phút), ~90s/clip 4K; soát mô tả ~25 đoạn trên 3 clip: đúng nội dung; cờ "có chữ" đúng 138/138 (clip thành phẩm có phụ đề + logo mọi khung) | Bỏ tấm lưới: mỗi đoạn một ảnh sau nhãn "Shot N"; Claude không lệch số lần nào. Chưa thử nút trên UI thật (cần worker chạy code mới)                      |
 | P5   | 2026-10-24 | Code đạt: 923 test (thêm 8); Full AI chọn theo đoạn, đặt `sourceStartMs`, không dùng lại đoạn trong một lần chạy, đoạn có chữ/logo xếp sau + cảnh báo (người dùng chọn)                                                                                                                                                              | Người dùng tự đánh giá mức giảm sửa tay trên dự án thật (không đo P0)                                                                                    |
 | P6   | 2026-10-24 | Code đạt: 925 test (thêm 2 + kiểm tra mới trong test cũ); khung "Cảnh thiếu" ở màn duyệt, nhắc video chưa phân tích ở màn chạy Full AI                                                                                                                                                                                               | Chỉ báo khi bước tự chọn media có chạy (tắt tự chọn thì cảnh trống là chủ ý); cảnh có hình rồi tự rời khỏi danh sách                                     |
+| P7   | 2026-10-24 | ADR 0019, mục Bổ sung trong PLAN.md (kèm ADR 0018), TECH-NOTES §11–12                                                                                                                                                                                                                                                                | P0 và mức giảm sửa tay: người dùng tự đánh giá trên dự án thật                                                                                           |
