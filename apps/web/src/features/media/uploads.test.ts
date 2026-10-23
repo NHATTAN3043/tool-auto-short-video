@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { ACCEPT_ATTRIBUTE, nextUpload, rejectReason, uploadsReducer, type UploadItem } from "./uploads";
+import {
+  ACCEPT_ATTRIBUTE,
+  libraryNote,
+  nextUpload,
+  rejectReason,
+  uploadsReducer,
+  type UploadItem,
+} from "./uploads";
 
 const add = (items: UploadItem[], ...names: string[]) =>
   uploadsReducer(items, {
@@ -33,5 +40,30 @@ describe("upload queue", () => {
     expect(ACCEPT_ATTRIBUTE).toContain(".mp4");
     expect(ACCEPT_ATTRIBUTE).toContain(".m4a");
     expect(rejectReason("x.webp")).toBeNull();
+  });
+});
+
+describe("libraryNote", () => {
+  it("says whether a video went to the shared library, and nothing for other files", () => {
+    expect(libraryNote(undefined)).toBeUndefined();
+    expect(libraryNote({ itemId: "lib_1", created: true })).toEqual({
+      text: "Đã lưu vào kho chung.",
+      tone: "info",
+    });
+    expect(libraryNote({ itemId: "lib_1", created: false })?.text).toMatch(/Đã có sẵn/u);
+    expect(libraryNote({ error: "disk full" })).toEqual({
+      text: "Chưa lưu được vào kho chung: disk full",
+      tone: "warning",
+    });
+  });
+
+  it("keeps the note on the finished upload", () => {
+    let items = uploadsReducer(add([], "a.mp4"), { type: "start", id: "u0" });
+    items = uploadsReducer(items, {
+      type: "done",
+      id: "u0",
+      note: { text: "Đã lưu vào kho chung.", tone: "info" },
+    });
+    expect(items[0]).toMatchObject({ status: "done", note: { text: "Đã lưu vào kho chung." } });
   });
 });

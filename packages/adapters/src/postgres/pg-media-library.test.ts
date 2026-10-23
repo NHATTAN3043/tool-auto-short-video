@@ -1,4 +1,4 @@
-import type { LibraryMedia } from "@studio/domain";
+import { uploadSourceRef, type LibraryMedia } from "@studio/domain";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import type { PgDatabase } from "./database";
@@ -45,6 +45,33 @@ describe.skipIf(TEST_DATABASE_URL === undefined)("PgMediaLibrary", () => {
     await expect(library.add({ ...item("lib_3"), sourceRef: "pixabay:video:lib_1" })).rejects.toMatchObject({
       code: "INVALID_OPERATION",
     });
+  });
+
+  it("keeps an uploaded video with its shot analysis, found by its content hash (ADR 0019)", async () => {
+    const upload: LibraryMedia = {
+      ...item("lib_up"),
+      source: "upload",
+      sourceRef: uploadSourceRef("sha256:lib_up"),
+      analysis: {
+        shots: [
+          { index: 0, startMs: 0, endMs: 2500, description: "Mèo ngủ", tags: ["cat"], textOverlay: false },
+          {
+            index: 1,
+            startMs: 2500,
+            endMs: 6000,
+            description: "Logo kênh",
+            tags: ["logo"],
+            textOverlay: true,
+            thumbnailPath: "shots/lib_up/001.jpg",
+          },
+        ],
+        model: "claude-sonnet-5-5",
+        analyzedAt: "2026-10-23T00:00:00.000Z",
+      },
+    };
+    await library.add(upload);
+    expect(await library.findBySourceRef("upload:sha256:lib_up")).toEqual(upload);
+    expect(await library.get("lib_up")).toEqual(upload);
   });
 
   it("sets tags, counts concurrent uses and removes", async () => {

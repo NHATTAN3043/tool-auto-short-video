@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { ClipShot } from "./clip-analysis";
-import { normalizeTags, stockSourceRef, uploadSourceRef, type LibraryMedia } from "./media-library";
+import {
+  belongsInLibrary,
+  normalizeTags,
+  stockSourceRef,
+  uploadSourceRef,
+  type LibraryMedia,
+} from "./media-library";
 import type { MediaAsset } from "./schema";
 import {
   candidateKey,
@@ -10,6 +16,7 @@ import {
   isOwnCandidate,
   MediaSearchQuerySchema,
   MIN_MATCH_SCORE,
+  ownTwinFilters,
   pickPreviewRendition,
   pickRendition,
   rankCandidates,
@@ -282,5 +289,49 @@ describe("candidateKey", () => {
     const third: MediaCandidate = { ...whole, segment: { index: 3, startMs: 9000, endMs: 12_000 } };
     expect(candidateKey(whole)).toBe("library:video:lib_1");
     expect(candidateKey(third)).toBe("library:video:lib_1#3");
+  });
+});
+
+describe("ownTwinFilters / belongsInLibrary", () => {
+  const analysis = {
+    shots: [clipShot(0, ["cat"], "A cat")],
+    model: "m",
+    analyzedAt: "2026-10-23T00:00:00.000Z",
+  };
+
+  it("keeps the project file until its library twin is analyzed, then the library item", () => {
+    const asset = { contentHash: "sha256:a", source: "upload" as const };
+    const plain = { contentHash: "sha256:a" };
+    const before = ownTwinFilters([asset], [plain]);
+    expect([before.keepAsset(asset), before.keepItem(plain)]).toEqual([true, false]);
+
+    const analyzedTwin = { contentHash: "sha256:a", analysis };
+    const after = ownTwinFilters([asset], [analyzedTwin]);
+    expect([after.keepAsset(asset), after.keepItem(analyzedTwin)]).toEqual([false, true]);
+  });
+
+  it("keeps the library item of a stock clip copied into the project", () => {
+    const filters = ownTwinFilters(
+      [{ contentHash: "sha256:a", source: "pexels" }],
+      [{ contentHash: "sha256:a" }],
+    );
+    expect(filters.keepItem({ contentHash: "sha256:a" })).toBe(true);
+  });
+
+  it("leaves files without a twin, and assets without a hash, alone", () => {
+    const filters = ownTwinFilters(
+      [{ contentHash: "sha256:a", source: "upload" }],
+      [{ contentHash: "sha256:b", analysis }],
+    );
+    expect(filters.keepAsset({})).toBe(true);
+    expect(filters.keepAsset({ contentHash: "sha256:c" })).toBe(true);
+    expect(filters.keepItem({ contentHash: "sha256:c" })).toBe(true);
+  });
+
+  it("sends only hashed videos to the library", () => {
+    expect(belongsInLibrary({ kind: "video", contentHash: "sha256:a" })).toBe(true);
+    expect(belongsInLibrary({ kind: "video" })).toBe(false);
+    expect(belongsInLibrary({ kind: "image", contentHash: "sha256:a" })).toBe(false);
+    expect(belongsInLibrary({ kind: "audio", contentHash: "sha256:a" })).toBe(false);
   });
 });

@@ -1,4 +1,5 @@
 import {
+  ownTwinFilters,
   rankCandidates,
   searchLibrary,
   searchProjectAssets,
@@ -87,20 +88,24 @@ export function makeSearchMedia(deps: MediaSearchDeps) {
     const providers = allowedProviders(deps.providers, project.automationSettings.mediaSearch).filter(
       (provider) => query.sources.includes(provider.id),
     );
+    const items = await deps.library.list();
+    // A file in both the project and the library is offered once.
+    const twins = ownTwinFilters(project.assets, items);
     // The channel logo is an image upload too, but never a scene's picture.
     const logoId = watermarkAssetId(project);
     const own = query.sources.includes("project")
       ? searchProjectAssets(
-          project.assets.filter((asset) => asset.id !== logoId),
+          project.assets.filter((asset) => asset.id !== logoId && twins.keepAsset(asset)),
           query.query,
           query.kind,
         )
           .slice(0, PROJECT_RESULTS)
           .map((asset) => projectCandidate(project.id, asset))
       : [];
-    const items = await deps.library.list();
     const library = query.sources.includes("library")
-      ? searchLibrary(items, query.query, query.kind).slice(0, LIBRARY_RESULTS).map(libraryCandidate)
+      ? searchLibrary(items.filter(twins.keepItem), query.query, query.kind)
+          .slice(0, LIBRARY_RESULTS)
+          .map(libraryCandidate)
       : [];
 
     const bySourceRef = new Map(items.map((item) => [item.sourceRef, item.id]));

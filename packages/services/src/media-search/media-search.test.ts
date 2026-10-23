@@ -4,6 +4,7 @@ import {
   DEFAULT_WATERMARK,
   MODE_PRESETS,
   scriptToScenes,
+  uploadSourceRef,
   type LibraryMedia,
   type MediaCandidate,
 } from "@studio/domain";
@@ -159,6 +160,65 @@ describe("searchMedia", () => {
         query: "x",
       }),
     ).rejects.toMatchObject({ code: "ASSET_NOT_FOUND" });
+  });
+
+  it("offers a video that is both in the project and in the library once (ADR 0019)", async () => {
+    const s = await setup("manual");
+    await s.repo.update("prj_1", (project) => ({
+      ...project,
+      assets: [
+        {
+          id: "ast_cat",
+          kind: "video",
+          source: "upload",
+          fileName: "orange-cat__sofa.mp4",
+          path: "media/ast_cat.mp4",
+          contentHash: "sha256:cat",
+          width: 1080,
+          height: 1920,
+          createdAt: "2026-10-10T00:00:00.000Z",
+        },
+      ],
+    }));
+    const twin: LibraryMedia = {
+      id: "lib_cat",
+      kind: "video",
+      fileName: "orange-cat__sofa.mp4",
+      path: "files/lib_cat.mp4",
+      tags: ["orange cat", "sofa"],
+      usageCount: 0,
+      source: "upload",
+      sourceRef: uploadSourceRef("sha256:cat"),
+      contentHash: "sha256:cat",
+      createdAt: "2026-10-10T00:00:00.000Z",
+    };
+    await s.library.add(twin);
+    const own = { ...query, query: "orange cat", sources: ["project" as const, "library" as const] };
+    const refs = async () =>
+      (await s.search({ projectId: "prj_1", query: own })).candidates.map((c) => `${c.provider}:${c.ref}`);
+
+    // Not analyzed yet: the project file, which needs no copy.
+    expect(await refs()).toEqual(["project:ast_cat"]);
+
+    // Analyzed: the library item, whose shots describe the clip.
+    s.library.items.set("lib_cat", {
+      ...twin,
+      analysis: {
+        shots: [
+          {
+            index: 0,
+            startMs: 0,
+            endMs: 3000,
+            description: "Orange cat",
+            tags: ["orange cat"],
+            textOverlay: false,
+          },
+        ],
+        model: "claude-sonnet-5-5",
+        analyzedAt: "2026-10-10T00:00:00.000Z",
+      },
+    });
+    expect(await refs()).toEqual(["library:lib_cat"]);
   });
 
   it("never offers the channel logo as a scene's picture", async () => {

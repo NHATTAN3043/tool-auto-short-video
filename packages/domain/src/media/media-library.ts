@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { normalizeWhitespace } from "../text/words";
 import { ClipAnalysisSchema } from "./clip-analysis";
+import type { MediaAsset } from "./schema";
 
 // The shared media library: stock videos and images downloaded once, and videos the user uploaded (ADR 0019),
 // reused by every project. Like the sound effect library, a project never points into it; using an item
@@ -76,4 +77,9 @@ export function stockSourceRef(provider: StockProvider, kind: "video" | "image",
 /** `upload:sha256:…`: an uploaded file is the same item in every project that uploads it. */
 export function uploadSourceRef(contentHash: string): string {
   return `upload:${contentHash}`;
+}
+
+/** Only uploaded videos go to the shared library: they are what clip analysis cuts into shots (ADR 0019). */
+export function belongsInLibrary(asset: Pick<MediaAsset, "kind" | "contentHash">): boolean {
+  return asset.kind === "video" && asset.contentHash !== undefined;
 }

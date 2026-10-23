@@ -1,5 +1,7 @@
 import { ACCEPTED_EXTENSIONS, mediaKindFromFileName } from "@studio/domain";
 
+import type { LibraryCopy } from "./api";
+
 // Upload queue of the media panel: files go up one at a time, each with its own progress and error.
 
 export type UploadStatus = "queued" | "uploading" | "done" | "error";
@@ -12,13 +14,15 @@ export interface UploadItem {
   /** 0..1 */
   progress: number;
   error?: string;
+  /** What happened besides the upload itself, e.g. the shared library copy. */
+  note?: { text: string; tone: "info" | "warning" };
 }
 
 export type UploadAction =
   | { type: "add"; files: { id: string; fileName: string; size: number }[] }
   | { type: "start"; id: string }
   | { type: "progress"; id: string; fraction: number }
-  | { type: "done"; id: string }
+  | { type: "done"; id: string; note?: UploadItem["note"] }
   | { type: "fail"; id: string; error: string }
   | { type: "clearFinished" };
 
@@ -55,7 +59,11 @@ export function uploadsReducer(items: UploadItem[], action: UploadAction): Uploa
     case "progress":
       return patch(items, action.id, { progress: Math.min(1, Math.max(0, action.fraction)) });
     case "done":
-      return patch(items, action.id, { status: "done", progress: 1 });
+      return patch(items, action.id, {
+        status: "done",
+        progress: 1,
+        ...(action.note !== undefined && { note: action.note }),
+      });
     case "fail":
       return patch(items, action.id, { status: "error", error: action.error });
     case "clearFinished":
@@ -67,4 +75,16 @@ export function uploadsReducer(items: UploadItem[], action: UploadAction): Uploa
 export function nextUpload(items: readonly UploadItem[]): UploadItem | null {
   if (items.some((item) => item.status === "uploading")) return null;
   return items.find((item) => item.status === "queued") ?? null;
+}
+
+/** The line under a finished upload about its shared library copy; none for files that do not go there. */
+export function libraryNote(library: LibraryCopy | undefined): UploadItem["note"] {
+  if (library === undefined) return undefined;
+  if ("error" in library) {
+    return { text: `Chưa lưu được vào kho chung: ${library.error}`, tone: "warning" };
+  }
+  return {
+    text: library.created ? "Đã lưu vào kho chung." : "Đã có sẵn trong kho chung, không lưu thêm.",
+    tone: "info",
+  };
 }

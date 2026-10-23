@@ -1,5 +1,6 @@
 import {
   addAsset,
+  belongsInLibrary,
   DomainError,
   fileExtension,
   mediaKindFromFileName,
@@ -14,6 +15,7 @@ import type { Clock } from "../ports/clock";
 import type { MediaProbePort, ProbeResult } from "../ports/media-probe";
 import type { ProjectRepository } from "../ports/project-repository";
 import type { StoragePort } from "../ports/storage";
+import type { AddUploadToLibrary } from "../media-search/add-upload-to-library";
 import { displayName, limited } from "./upload-stream";
 
 export interface ImportAssetInput {
@@ -22,6 +24,17 @@ export interface ImportAssetInput {
   fileName: string;
   data: AsyncIterable<Uint8Array>;
   source?: MediaSource;
+  /** Copy a video to the shared library too (ADR 0019); default true. Other kinds never go there. */
+  addToLibrary?: boolean;
+}
+
+/** What happened to the shared library copy; absent when the file does not go there. */
+export type LibraryCopyResult = { itemId: string; created: boolean } | { error: string };
+
+export interface ImportAssetResult {
+  project: Project;
+  asset: MediaAsset;
+  library?: LibraryCopyResult;
 }
 
 export interface ImportAssetDeps {
@@ -32,6 +45,8 @@ export interface ImportAssetDeps {
   newId?: IdGenerator;
   /** Upload size limit; the write stops and is cleaned up as soon as the stream goes past it. */
   maxBytes?: number;
+  /** Without it nothing goes to the shared library. */
+  addToLibrary?: AddUploadToLibrary;
 }
 
 export const THUMBNAIL_WIDTH = 360;
@@ -52,10 +67,11 @@ function assetFromProbe(base: Omit<MediaAsset, "kind">, probed: ProbeResult): Me
 
 /**
  * Stores an uploaded file untouched, probes it, makes a thumbnail and adds it to the project.
- * Every failure after the file is written removes what was written.
+ * Every failure after the file is written removes what was written. A video is then copied to the shared
+ * library; that copy failing never fails the upload, it is only reported.
  */
 export function makeImportAsset(deps: ImportAssetDeps) {
-  return async (input: ImportAssetInput): Promise<{ project: Project; asset: MediaAsset }> => {
+  return async (input: ImportAssetInput): Promise<ImportAssetResult> => {
     const fileName = displayName(input.fileName);
     const expectedKind = mediaKindFromFileName(fileName);
     const extension = fileExtension(fileName);
@@ -71,6 +87,8 @@ export function makeImportAsset(deps: ImportAssetDeps) {
     const mediaKey = `${projectKey}/${mediaPath}`;
     const thumbnailKey = `${projectKey}/${thumbnailPath}`;
     const cleanup = () => Promise.all([deps.storage.remove(mediaKey), deps.storage.remove(thumbnailKey)]);
+    let asset: MediaAsset;
+    let project: Project;
 
     try {
       const written = await deps.storage.write(
@@ -115,15 +133,25 @@ export function makeImportAsset(deps: ImportAssetDeps) {
         }
       }
 
-      const asset = assetFromProbe(base, probed);
-      const project = await deps.repo.update(input.projectId, (stored) => ({
-        ...addAsset(stored, asset),
+      asset = assetFromProbe(base, probed);
+      const added = asset;
+      project = await deps.repo.update(input.projectId, (stored) => ({
+        ...addAsset(stored, added),
         updatedAt: deps.clock.now(),
       }));
-      return { project, asset };
     } catch (error) {
       await cleanup();
       throw error;
+    }
+
+    if (!deps.addToLibrary || input.addToLibrary === false || !belongsInLibrary(asset)) {
+      return { project, asset };
+    }
+    try {
+      const copied = await deps.addToLibrary({ projectId: input.projectId, asset });
+      return { project, asset, library: { itemId: copied.item.id, created: copied.created } };
+    } catch (error) {
+      return { project, asset, library: { error: error instanceof Error ? error.message : String(error) } };
     }
   };
 }

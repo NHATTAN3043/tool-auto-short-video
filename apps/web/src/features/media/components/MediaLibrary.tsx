@@ -2,11 +2,13 @@
 
 import type { MediaAsset } from "@studio/domain";
 import { CheckIcon, CircleAlertIcon, LoaderIcon, UploadIcon } from "lucide-react";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
+import { Label } from "@/shared/ui/label";
+import { Switch } from "@/shared/ui/switch";
 
 import { formatBytes, formatPercent } from "../format";
 import { useMediaUploads } from "../hooks/use-media-uploads";
@@ -40,6 +42,13 @@ function UploadRow({ item }: { item: UploadItem }) {
         </div>
       ) : null}
       {item.error ? <p className="text-xs text-destructive">{item.error}</p> : null}
+      {item.note ? (
+        <p
+          className={cn("text-xs", item.note.tone === "warning" ? "text-amber-600" : "text-muted-foreground")}
+        >
+          {item.note.text}
+        </p>
+      ) : null}
     </li>
   );
 }
@@ -54,8 +63,10 @@ export function MediaLibrary({
   assets: readonly MediaAsset[];
   onUploaded: (asset: MediaAsset) => void;
 }) {
-  const uploads = useMediaUploads(projectId, onUploaded);
+  const [addToLibrary, setAddToLibrary] = useState(true);
+  const uploads = useMediaUploads(projectId, onUploaded, { addToLibrary });
   const input = useRef<HTMLInputElement>(null);
+  const libraryId = useId();
   const [dragging, setDragging] = useState(false);
   const finished = uploads.items.filter((item) => item.status === "done" || item.status === "error");
 
@@ -114,6 +125,17 @@ export function MediaLibrary({
               event.target.value = "";
             }}
           />
+        </div>
+
+        <div className="flex items-start gap-2">
+          <Switch id={libraryId} checked={addToLibrary} onCheckedChange={setAddToLibrary} />
+          <div className="flex flex-col gap-0.5">
+            <Label htmlFor={libraryId}>Lưu video vào kho chung</Label>
+            <p className="text-xs text-muted-foreground">
+              Dự án khác cũng tìm thấy video này, và sau khi phân tích, Full AI chọn được đúng đoạn trong
+              video. Ảnh và âm thanh chỉ thuộc dự án này.
+            </p>
+          </div>
         </div>
 
         {uploads.items.length > 0 ? (

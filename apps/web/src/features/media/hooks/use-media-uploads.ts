@@ -4,32 +4,49 @@ import type { MediaAsset } from "@studio/domain";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 
 import { uploadAsset, type UploadHandle } from "../api";
-import { nextUpload, rejectReason, uploadsReducer } from "../uploads";
+import { libraryNote, nextUpload, rejectReason, uploadsReducer } from "../uploads";
 
-/** Sends dropped files one by one and reports each finished asset to `onUploaded`. */
-export function useMediaUploads(projectId: string, onUploaded: (asset: MediaAsset) => void) {
+/**
+ * Sends dropped files one by one and reports each finished asset to `onUploaded`. `addToLibrary` is read
+ * when each file starts, so switching it applies to the files still waiting.
+ */
+export function useMediaUploads(
+  projectId: string,
+  onUploaded: (asset: MediaAsset) => void,
+  options: { addToLibrary?: boolean } = {},
+) {
   const [items, dispatch] = useReducer(uploadsReducer, []);
   const files = useRef(new Map<string, File>());
   const active = useRef<UploadHandle | null>(null);
   const counter = useRef(0);
   const onUploadedRef = useRef(onUploaded);
+  const addToLibraryRef = useRef(options.addToLibrary);
 
   useEffect(() => {
     onUploadedRef.current = onUploaded;
   }, [onUploaded]);
 
   useEffect(() => {
+    addToLibraryRef.current = options.addToLibrary;
+  }, [options.addToLibrary]);
+
+  useEffect(() => {
     const next = nextUpload(items);
     const file = next ? files.current.get(next.id) : undefined;
     if (!next || !file) return;
     dispatch({ type: "start", id: next.id });
-    const handle = uploadAsset(projectId, file, (fraction) => {
-      dispatch({ type: "progress", id: next.id, fraction });
-    });
+    const handle = uploadAsset(
+      projectId,
+      file,
+      (fraction) => {
+        dispatch({ type: "progress", id: next.id, fraction });
+      },
+      addToLibraryRef.current === undefined ? {} : { addToLibrary: addToLibraryRef.current },
+    );
     active.current = handle;
     handle.promise
-      .then((asset) => {
-        dispatch({ type: "done", id: next.id });
+      .then(({ asset, library }) => {
+        dispatch({ type: "done", id: next.id, note: libraryNote(library) });
         onUploadedRef.current(asset);
       })
       .catch((error: unknown) => {

@@ -252,6 +252,29 @@ export function searchProjectAssets(
     .map(({ asset }) => asset);
 }
 
+/**
+ * A video uploaded into the project is also in the shared library (ADR 0019), so the same file would be
+ * offered twice. The library item wins once it is analyzed, since its shots say what is in it; until then
+ * the project file wins, since using it copies nothing. Only uploads count on the project side: stock
+ * copies are never offered as project files, so their library item must stay.
+ */
+export function ownTwinFilters(
+  projectAssets: readonly Pick<MediaAsset, "contentHash" | "source">[],
+  libraryItems: readonly Pick<LibraryMedia, "contentHash" | "analysis">[],
+): {
+  keepAsset: (asset: Pick<MediaAsset, "contentHash">) => boolean;
+  keepItem: (item: Pick<LibraryMedia, "contentHash" | "analysis">) => boolean;
+} {
+  const inProject = new Set(
+    projectAssets.flatMap((asset) => (asset.source === "upload" ? (asset.contentHash ?? []) : [])),
+  );
+  const analyzed = new Set(libraryItems.filter((item) => item.analysis).map((item) => item.contentHash));
+  return {
+    keepAsset: (asset) => asset.contentHash === undefined || !analyzed.has(asset.contentHash),
+    keepItem: (item) => item.analysis !== undefined || !inProject.has(item.contentHash),
+  };
+}
+
 /** Best library matches of the right kind, portrait and more-used first. */
 export function searchLibrary(
   items: readonly LibraryMedia[],

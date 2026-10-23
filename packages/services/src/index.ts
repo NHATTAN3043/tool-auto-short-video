@@ -45,6 +45,8 @@ export {
   THUMBNAIL_WIDTH,
   type ImportAssetDeps,
   type ImportAssetInput,
+  type ImportAssetResult,
+  type LibraryCopyResult,
 } from "./media/import-asset";
 export {
   makeReadProjectFile,
@@ -132,6 +134,11 @@ export {
   makeRemoveLibraryMedia,
   makeSetLibraryMediaTags,
 } from "./media-search/media-library";
+export {
+  makeAddUploadToLibrary,
+  type AddUploadToLibrary,
+  type AddUploadToLibraryResult,
+} from "./media-search/add-upload-to-library";
 export { makeProxyStockMedia } from "./media-search/proxy-stock-media";
 export {
   makeGetBudgetSettings,

@@ -54,7 +54,7 @@ function useSceneVoiceUpload(projectId: string, picker: SceneVoicePicker | undef
     const handle = uploadAsset(projectId, file, setProgress);
     handleRef.current = handle;
     handle.promise
-      .then((asset) => {
+      .then(({ asset }) => {
         picker.onAssetAdded(asset);
         picker.onChange(asset.id);
       })
