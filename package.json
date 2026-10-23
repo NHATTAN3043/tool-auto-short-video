@@ -18,6 +18,7 @@
     "test:coverage": "vitest run --root packages/domain --coverage",
     "render": "pnpm --filter @studio/worker render",
     "demo": "pnpm --filter @studio/worker demo",
+    "clip:shots": "pnpm --filter @studio/worker clip:shots",
     "db:generate": "pnpm --filter @studio/adapters db:generate",
     "db:migrate": "pnpm --filter @studio/worker db:migrate",
     "db:import": "pnpm --filter @studio/worker db:import",

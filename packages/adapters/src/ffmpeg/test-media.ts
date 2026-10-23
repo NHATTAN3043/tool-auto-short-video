@@ -34,6 +34,32 @@ export function makeVideo(dir: string, name = "landscape.mp4"): string {
   return out;
 }
 
+/**
+ * 720×1280 portrait, 30fps, 9s in three shots: red 0–2s, blue 2–5s, a moving test pattern 5–9s. Scene
+ * changes at 2000 and 5000 ms.
+ */
+export function makeShotsVideo(dir: string, name = "shots.mp4"): string {
+  const out = path.join(dir, name);
+  ffmpeg(
+    ...["-f", "lavfi", "-i", "color=red:size=720x1280:rate=30:duration=2"],
+    ...["-f", "lavfi", "-i", "color=blue:size=720x1280:rate=30:duration=3"],
+    ...["-f", "lavfi", "-i", "testsrc2=size=720x1280:rate=30:duration=4"],
+    ...["-filter_complex", "[0][1][2]concat=n=3:v=1:a=0"],
+    ...["-c:v", "libx264", "-pix_fmt", "yuv420p", out],
+  );
+  return out;
+}
+
+/** One continuous shot: a slowly moving pattern with no scene change. */
+export function makeSingleShotVideo(dir: string, seconds: number, name = "single-shot.mp4"): string {
+  const out = path.join(dir, name);
+  ffmpeg(
+    ...["-f", "lavfi", "-i", `testsrc2=size=640x360:rate=30:duration=${String(seconds)}`],
+    ...["-c:v", "libx264", "-pix_fmt", "yuv420p", out],
+  );
+  return out;
+}
+
 /** Same pixels as a phone recording: 1280×720 stored, flagged to be displayed rotated by 90°. */
 export function makeRotatedVideo(dir: string): string {
   const plain = makeVideo(dir, "rotated-source.mp4");

@@ -8,6 +8,7 @@
     "start": "tsx src/main.ts",
     "render": "tsx src/cli/render.ts",
     "demo": "tsx src/cli/demo.ts",
+    "clip:shots": "tsx src/cli/clip-shots.ts",
     "db:migrate": "tsx src/cli/db-migrate.ts",
     "db:import": "tsx src/cli/db-import.ts",
     "typecheck": "tsc -p ."

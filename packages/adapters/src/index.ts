@@ -5,6 +5,11 @@ export {
   type FfmpegAudioNormalizerOptions,
 } from "./ffmpeg/ffmpeg-audio-normalizer";
 export { FfmpegClipCutter, type FfmpegClipCutterOptions } from "./ffmpeg/ffmpeg-clip-cutter";
+export {
+  DEFAULT_CUT_THRESHOLD,
+  FfmpegClipFrames,
+  type FfmpegClipFramesOptions,
+} from "./ffmpeg/ffmpeg-clip-frames";
 export { FfmpegMediaProbe, type FfmpegOptions } from "./ffmpeg/ffmpeg-media-probe";
 export { FileJobQueue } from "./queue-file/file-job-queue";
 export { JsonProjectRepository } from "./repository-json/json-project-repository";

@@ -5,6 +5,7 @@ export type { ProjectRepository, ProjectSummary } from "./ports/project-reposito
 export type { ArchiveEntry, ArchivePort } from "./ports/archive";
 export type { AudioNormalizerPort } from "./ports/audio-normalizer";
 export type { ClipCutterPort, ClipRange } from "./ports/clip-cutter";
+export type { ClipFramesPort, DetectCutsOptions, GrabFramesOptions } from "./ports/clip-frames";
 export type { RendererPort, RenderRequest } from "./ports/renderer";
 export type { SfxLibraryRepository } from "./ports/sfx-library";
 export type { StoragePort } from "./ports/storage";

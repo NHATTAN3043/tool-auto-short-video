@@ -1,6 +1,6 @@
 # Kế hoạch triển khai — Phân tích clip tự tải và báo cảnh thiếu
 
-**Trạng thái:** đang làm (P1 xong) · ADR dự kiến: 0019 · Bổ sung cho ADR 0008 (thư viện chung), 0010 (Full AI), 0016 (file upload)
+**Trạng thái:** đang làm (P1 xong, P2 phần code xong) · ADR dự kiến: 0019 · Bổ sung cho ADR 0008 (thư viện chung), 0010 (Full AI), 0016 (file upload)
 
 ## Mục tiêu
 
@@ -16,7 +16,7 @@
 | Nơi upload        | Trong dự án như hiện tại; video tự vào kho, có ô "Lưu vào kho chung" (mặc định bật) |
 | Khi nào phân tích | Chỉ khi bấm nút, có hộp xác nhận chi phí; Full AI không tự phân tích                |
 | Cảnh trống        | Chỉ báo để người dùng tải; không tạo ảnh/video AI                                   |
-| Độ dài clip       | 1–5 phút → tối đa 48 đoạn, 3 tấm lưới 4×4                                           |
+| Độ dài clip       | 1–5 phút → tối đa 48 đoạn, mỗi đoạn một ảnh ≤ 480px                                 |
 
 ## Không làm trong đợt này
 
@@ -29,7 +29,7 @@ Tạo ảnh/video bằng AI, tải video từ link TikTok/YouTube, xoá watermar
 upload (dự án) ──copy──► kho chung: LibraryMedia { source: "upload", sourceRef: "upload:<sha256>", analysis? }
                                     │  bấm "Phân tích" → job `clip` (worker)
                                     ▼
-             ffmpeg scdet → điểm cắt → shotsFromCuts() → khung giữa mỗi đoạn → tấm lưới 4×4 (đánh số)
+             ffmpeg scdet → điểm cắt → shotsFromCuts() → khung giữa mỗi đoạn (ảnh ≤ 480px)
                                     ▼
              Claude vision (qua CostGuard) → mô tả + tag en/vi + có chữ/watermark, theo số thứ tự đoạn
                                     ▼
@@ -39,7 +39,7 @@ Full AI: mỗi đoạn là một ứng viên (key `library:video:lib_1#3`) → x
          cảnh không có ứng viên / bị loại hết → missingScenes[]
 ```
 
-- File gốc không bao giờ bị sửa (luật 4); ảnh đoạn và tấm lưới là file phụ trong thư mục kho.
+- File gốc không bao giờ bị sửa (luật 4); ảnh của từng đoạn là file phụ trong thư mục kho.
 - Gán đoạn chỉ đặt `sourceStartMs`, để `sourceEndMs` trống: nếu giọng dài hơn đoạn, video chạy tiếp tự nhiên sang
   đoạn sau thay vì lặp lại. Mỗi đoạn chỉ dùng cho một cảnh trong cùng dự án.
 - Dự án có asset cùng `contentHash` với item trong kho thì dùng lại asset đó, không copy lần nữa.
@@ -98,20 +98,23 @@ Mỗi phần là một commit riêng (Conventional Commit), để lỗi ở ph�
 **File:**
 
 - `packages/services/src/ports/clip-frames.ts` (mới): `ClipFramesPort { detectCuts(path, { threshold }),
-grabFrames(path, atMs[], outDir, { width }), contactSheet(frames[], out, { cols, rows }) }`.
-- `packages/adapters/src/ffmpeg/ffmpeg-clip-frames.ts` (mới): `scdet` + đọc `lavfi.scd.time` từ stderr; khung
-  bằng `-ss`; tấm lưới bằng `tile` + `drawtext` số thứ tự.
-- Script `pnpm clip:shots <file>`: in danh sách đoạn và ghi tấm lưới ra scratch để xem bằng mắt.
+grabFrames(path, atMs[], outDir, { maxSide }) }`.
+- `packages/adapters/src/ffmpeg/ffmpeg-clip-frames.ts` (mới): `scdet` trên bản thu nhỏ 320px + đọc
+  `lavfi.scd.time` từ stderr; khung bằng `-ss` trước `-i`, cạnh dài ≤ 480px.
+- Script `pnpm clip:shots <file...> [--threshold=10]`: in danh sách đoạn và ghi trang HTML các khung ra thư mục tạm
+  để xem bằng mắt.
+- **Đổi so với bản đầu:** bỏ tấm lưới. `drawtext` của ffmpeg crash khi thiếu fontconfig và cần đường dẫn font khác
+  nhau giữa Windows/Linux. Thay vào đó P4 gửi **mỗi đoạn một ảnh**, đứng sau dòng chữ "Shot N" (API cho tối đa 100
+  ảnh mỗi lần gọi): Claude không thể đánh số lệch, chi phí token tương đương.
 
 **Test tự động** (`test-media.ts`, video sinh bằng `lavfi`):
 
 - Video 3 màu liền nhau (0–2s, 2–5s, 5–9s) → điểm cắt ≈ 2000, 5000 ms (±1 khung).
 - Video một cảnh tĩnh 20s → không có điểm cắt.
 - `grabFrames` tạo đúng số file, đúng chiều rộng; video xoay (điện thoại) cho khung đúng chiều.
-- `contactSheet` 16 khung → 1 ảnh đúng kích thước; ít hơn 16 khung vẫn chạy.
 - File hỏng / không phải video → lỗi rõ ràng, không treo.
 
-**Kiểm tra tay:** chạy `pnpm clip:shots` trên 5 clip mẫu, xem tấm lưới:
+**Kiểm tra tay:** chạy `pnpm clip:shots` trên 5 clip mẫu, mở trang HTML:
 
 - [ ] Không đoạn nào < 1,2s hoặc > 8s; ≤ 48 đoạn mỗi clip.
 - [ ] Đa số chỗ chuyển cảnh thật được bắt; ghi lại chỗ bỏ sót/chia vụn → chỉnh `threshold` (bắt đầu 10).
@@ -156,7 +159,7 @@ grabFrames(path, atMs[], outDir, { width }), contactSheet(frames[], out, { cols,
 - `AiPort.describeShots({ sheets, shotCount, language })` + `estimate`; adapter `ai-claude`: prompt, structured
   output `{ shots: [{ index, description, tags_en, tags_vi, textOverlay }] }`, validate zod.
 - Use case `requestClipAnalysis` (ước tính chi phí, giữ chỗ CostGuard, không tạo job trùng) và `analyzeClip`
-  (worker): cắt → `shotsFromCuts` → khung + ảnh từng đoạn → tấm lưới → Claude → lưu `analysis`; mỗi clip lỗi riêng,
+  (worker): cắt → `shotsFromCuts` → ảnh từng đoạn → Claude (mỗi ảnh sau chữ "Shot N") → lưu `analysis`; mỗi clip lỗi riêng,
   không kéo clip khác; dọn file tạm.
 - Worker: xử lý job `clip`. `container.ts` web + worker đăng ký port mới.
 - Web: trong danh sách media, clip có trạng thái "Chưa phân tích / Đang phân tích / N đoạn"; nút "Phân tích" (chọn
@@ -227,7 +230,7 @@ grabFrames(path, atMs[], outDir, { width }), contactSheet(frames[], out, { cols,
 
 ## P7 — Hoàn tất
 
-- ADR 0019, mục "Bổ sung" trong `docs/PLAN.md`, bẫy kỹ thuật (`scdet`, ngưỡng, tấm lưới) vào `docs/TECH-NOTES.md`.
+- ADR 0019, mục "Bổ sung" trong `docs/PLAN.md`, bẫy kỹ thuật (`scdet`, ngưỡng, `drawtext` cần fontconfig) vào `docs/TECH-NOTES.md`.
 - `pnpm check`; tổng kết file đổi, rủi ro, chi phí đo được, số đo trước/sau.
 
 ---
@@ -238,14 +241,15 @@ grabFrames(path, atMs[], outDir, { width }), contactSheet(frames[], out, { cols,
 | ------------------------------------------------------------ | ----------------------------------------------------------------------- |
 | `scdet` bỏ sót cảnh quay liền / chia vụn clip nhiều hiệu ứng | Gộp/chia theo `MIN/MAX_SHOT_MS`; chỉnh ngưỡng ở P2 trên clip thật       |
 | Khung giữa đoạn không đại diện khi máy quay di chuyển        | Đoạn dài bị chia ≤ 8s; nếu vẫn kém, P4 thử 2 khung mỗi đoạn             |
-| Claude đánh số đoạn lệch so với ô trên tấm lưới              | Số in to trên từng ô; kiểm tra đủ và đúng `index`, sai thì cả clip lỗi  |
+| Claude trả lệch số đoạn                                      | Mỗi ảnh đi sau chữ "Shot N"; kiểm tra đủ và đúng `index`, sai thì lỗi   |
 | Chi phí cao hơn dự kiến                                      | Ước tính trước, CostGuard chặn; đo thật ở P4 trước khi sang P5          |
 | Clip dính watermark của kênh khác                            | Cờ `textOverlay`, xếp sau; người dùng tự quyết                          |
 | Dung lượng đĩa tăng (file trong kho + trong dự án)           | Dùng lại asset cùng hash; giống cách thư viện stock đang làm (ADR 0008) |
 
 ## Nhật ký kiểm thử
 
-| Phần | Ngày       | Kết quả                                  | Ghi chú                                                 |
-| ---- | ---------- | ---------------------------------------- | ------------------------------------------------------- |
-| P0   |            | chờ người dùng gửi 5 clip + 2 script     |                                                         |
-| P1   | 2026-10-23 | Đạt: 860/860 test, lint, typecheck, arch | Mô tả chỉ cộng điểm; đoạn chỉ khớp mô tả (< 20) bị loại |
+| Phần | Ngày       | Kết quả                                                            | Ghi chú                                                 |
+| ---- | ---------- | ------------------------------------------------------------------ | ------------------------------------------------------- |
+| P0   |            | chờ người dùng gửi 5 clip + 2 script                               |                                                         |
+| P1   | 2026-10-23 | Đạt: 860/860 test, lint, typecheck, arch                           | Mô tả chỉ cộng điểm; đoạn chỉ khớp mô tả (< 20) bị loại |
+| P2   | 2026-10-23 | Code đạt: 7 test ffmpeg; clip tổng hợp 3 phút 1080p → 24 đoạn, 27s | Chờ kiểm tra tay trên 5 clip thật                       |
