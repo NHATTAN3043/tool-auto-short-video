@@ -54,6 +54,7 @@ import { IdeaStep } from "./IdeaStep";
 import { OutlineFeedback, OutlineStep, type OutlineActions, type RewriteState } from "./OutlineStep";
 import { QuestionsStep } from "./QuestionsStep";
 import { BriefSummary, StudioError, StudioStepper } from "./studio-parts";
+import { UnanalyzedClipsHint } from "./UnanalyzedClipsHint";
 
 type LastRun = { kind: "questions" } | { kind: "outline"; feedback: string; skipAnswers: boolean };
 
@@ -249,6 +250,7 @@ export function FullAiStudio({
           onLanguageChange={changeLanguage}
         />
         {startError ? <p className="text-sm text-muted-foreground">{startError}</p> : null}
+        {quickSteps.includes("media") ? <UnanalyzedClipsHint project={project} /> : null}
       </>
     );
     footer = (

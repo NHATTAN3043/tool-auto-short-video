@@ -10,7 +10,7 @@ import {
   type ClipShot,
   type ShotSpan,
 } from "./clip-analysis";
-import { LibraryMediaSchema, uploadSourceRef, type LibraryMedia } from "./media-library";
+import { LibraryMediaSchema, unanalyzedUploads, uploadSourceRef, type LibraryMedia } from "./media-library";
 
 const lengths = (spans: readonly ShotSpan[]) => spans.map((span) => span.endMs - span.startMs);
 
@@ -149,5 +149,39 @@ describe("LibraryMediaSchema with uploads and analysis", () => {
     const analyzed = { ...upload, analysis: analysis([shot(0, 0, 2000)]) };
     expect(LibraryMediaSchema.safeParse(analyzed).success).toBe(true);
     expect(LibraryMediaSchema.safeParse({ ...analyzed, kind: "image" }).success).toBe(false);
+  });
+});
+
+describe("unanalyzedUploads", () => {
+  const item = (id: string, extra: Partial<LibraryMedia> = {}): LibraryMedia => ({
+    id,
+    kind: "video",
+    fileName: `${id}.mp4`,
+    path: `files/${id}.mp4`,
+    tags: [],
+    usageCount: 0,
+    source: "upload",
+    sourceRef: uploadSourceRef(`sha256:${id}`),
+    contentHash: `sha256:${id}`,
+    createdAt: "2026-10-01T00:00:00.000Z",
+    ...extra,
+  });
+  const upload = (hash: string) => ({ source: "upload" as const, kind: "video" as const, contentHash: hash });
+
+  it("lists this project's uploaded videos that are not analyzed yet", () => {
+    const items = [
+      item("a"),
+      item("b", { analysis: analysis([shot(0, 0, 2000)]) }),
+      item("c"),
+      item("p", { source: "pexels", sourceRef: "pexels:video:p" }),
+    ];
+    const assets = [
+      upload("sha256:a"),
+      upload("sha256:b"),
+      upload("sha256:p"),
+      { source: "pexels" as const, kind: "video" as const, contentHash: "sha256:c" },
+    ];
+    expect(unanalyzedUploads(assets, items).map((i) => i.id)).toEqual(["a"]);
+    expect(unanalyzedUploads([], items)).toEqual([]);
   });
 });

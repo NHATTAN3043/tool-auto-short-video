@@ -190,6 +190,15 @@ describe("Full AI", () => {
     // Rejected files stay last, so "Đổi media" can still offer them.
     expect(result.scenes[0]?.candidates.map((candidate) => candidate.ref)).toEqual(["v2", "v1", "v3"]);
     expect(result.warnings).toEqual(["Cảnh 2: AI thấy không media nào phù hợp, hãy chọn tay"]);
+    // The empty scene is listed with what to look for (ADR 0019).
+    expect(result.missingScenes).toEqual([
+      {
+        sceneId: project.scenes[1]?.id,
+        reason: "all_rejected",
+        intent: "Chó",
+        queries: { en: ["dog"], vi: [], zh: [] },
+      },
+    ]);
   });
 
   it("offers the project's uploads first, but keeps places for stock", async () => {
@@ -303,6 +312,8 @@ describe("Full AI", () => {
     // Without ranking the search order is kept, for "Đổi media".
     const result = await s.getResult({ projectId: "prj_1", jobId: job.id });
     expect(result.scenes[0]?.candidates.map((candidate) => candidate.ref)).toEqual(["v1", "v2", "v3"]);
+    // Nothing picked by choice: no scene is reported missing.
+    expect(result.missingScenes).toBeUndefined();
   });
 
   it("stops at a blocked budget and keeps what the earlier steps made", async () => {

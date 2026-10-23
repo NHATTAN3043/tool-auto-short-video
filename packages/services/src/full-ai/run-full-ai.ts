@@ -14,6 +14,7 @@ import {
   FULL_AI_MAX_WARNINGS,
   FULL_AI_STEP_LABELS,
   FullAiResultSchema,
+  missingScenes,
   initialVoiceSettings,
   isDomainError,
   isOwnCandidate,
@@ -443,6 +444,9 @@ export function makeRunFullAi(deps: RunFullAiDeps) {
         return entry ? [{ sceneId: scene.id, candidates: entry.candidates }] : [];
       }),
       warnings,
+      // What the user still has to find, with the keywords to look for (ADR 0019). Only when the run
+      // picked media itself: otherwise empty scenes are the user's to fill, by choice.
+      ...(steps.includes("select") && { missingScenes: missingScenes(project.scenes, found) }),
     });
     const outputPath = `full-ai/${job.id}.json`;
     await deps.storage.write(

@@ -7,10 +7,13 @@ import { useId, useState, type ReactNode } from "react";
 import { projectFileUrl } from "@/features/media/api";
 import { importCandidate, type PickedMedia } from "@/features/media-search/api";
 import { linkUrl, pickedCandidate, SOURCE_LABELS } from "@/features/media-search/model";
+import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent } from "@/shared/ui/card";
 import { Input } from "@/shared/ui/input";
+
+import { reviewSceneAnchor } from "../model";
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : "Đã có lỗi xảy ra.");
 
@@ -138,7 +141,7 @@ export function ReviewSceneCard({
   const approved = scene.status === "approved";
 
   return (
-    <Card className={approved ? "border-primary/60" : undefined}>
+    <Card id={reviewSceneAnchor(scene.id)} className={cn("scroll-mt-20", approved && "border-primary/60")}>
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="flex items-center gap-2 font-medium">

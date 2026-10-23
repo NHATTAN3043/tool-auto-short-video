@@ -26,7 +26,8 @@ import {
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
 
-import { alternativesFor, rememberedSkill, reviewStats } from "../model";
+import { alternativesFor, rememberedSkill, reviewStats, stillMissing } from "../model";
+import { MissingScenesPanel } from "./MissingScenesPanel";
 import { ReviewSceneCard } from "./ReviewSceneCard";
 import { SkillPicker } from "./SkillPicker";
 
@@ -137,6 +138,8 @@ export function FullAiReview({
           </CardContent>
         ) : null}
       </Card>
+
+      <MissingScenesPanel scenes={stillMissing(result, project)} />
 
       {editor.lastError ? (
         <p className="text-sm text-destructive" role="alert">

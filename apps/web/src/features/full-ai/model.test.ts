@@ -15,6 +15,9 @@ import { describe, expect, it } from "vitest";
 import type { FullAiEstimate } from "./api";
 import {
   alternativesFor,
+  MISSING_REASON_LABELS,
+  reviewSceneAnchor,
+  stillMissing,
   approveRequest,
   briefTask,
   costLines,
@@ -247,5 +250,25 @@ describe("review", () => {
     expect(alternativesFor(result, project(), "s1").map((c) => c.ref)).toEqual(["b"]);
     expect(alternativesFor(result, project(), "s2")).toEqual([]);
     expect(alternativesFor(null, project(), "s1")).toEqual([]);
+  });
+
+  it("lists the scenes the run left empty that are still empty, numbered (ADR 0019)", () => {
+    const missing = (sceneId: string) => ({
+      sceneId,
+      reason: "no_candidates" as const,
+      intent: "Mèo",
+      queries: { en: ["cat"], vi: ["mèo"], zh: [] },
+    });
+    const result: FullAiResult = {
+      scenes: [],
+      warnings: [],
+      // s1 got media since, s9 was deleted: only s2 is left.
+      missingScenes: [missing("s1"), missing("s2"), missing("s9")],
+    };
+    expect(stillMissing(result, project())).toEqual([{ ...missing("s2"), number: 2 }]);
+    expect(stillMissing({ scenes: [], warnings: [] }, project())).toEqual([]);
+    expect(stillMissing(null, project())).toEqual([]);
+    expect(MISSING_REASON_LABELS.all_rejected).toBe("AI thấy không media nào hợp");
+    expect(reviewSceneAnchor("s2")).toBe("review-scene-s2");
   });
 });

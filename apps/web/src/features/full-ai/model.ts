@@ -16,6 +16,8 @@ import {
   type FullAiStep,
   type MediaCandidate,
   type MediaRankingMode,
+  type MissingScene,
+  type MissingSceneReason,
   type Project,
   type RenderJob,
   type AutomationSettings,
@@ -299,4 +301,28 @@ export function alternativesFor(
         ? candidate.ref !== current.id
         : !current.fileName.startsWith(`${candidate.provider}-${candidate.ref}.`)),
   );
+}
+
+export const MISSING_REASON_LABELS: Record<MissingSceneReason, string> = {
+  no_candidates: "Không tìm thấy media nào",
+  all_rejected: "AI thấy không media nào hợp",
+  not_assigned: "Có media hợp nhưng tải về lỗi",
+};
+
+/** Anchor of a scene card on the review screen, for "Đến cảnh". */
+export const reviewSceneAnchor = (sceneId: string) => `review-scene-${sceneId}`;
+
+/**
+ * Scenes the run left without media that still have none (ADR 0019), with their number. A scene the user
+ * filled or deleted since drops out, so the list shrinks while they work through it.
+ */
+export function stillMissing(
+  result: FullAiResult | null,
+  project: Project,
+): (MissingScene & { number: number })[] {
+  return (result?.missingScenes ?? []).flatMap((missing) => {
+    const index = project.scenes.findIndex((scene) => scene.id === missing.sceneId);
+    const scene = project.scenes[index];
+    return scene && scene.media === undefined ? [{ ...missing, number: index + 1 }] : [];
+  });
 }

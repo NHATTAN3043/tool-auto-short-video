@@ -83,3 +83,22 @@ export function uploadSourceRef(contentHash: string): string {
 export function belongsInLibrary(asset: Pick<MediaAsset, "kind" | "contentHash">): boolean {
   return asset.kind === "video" && asset.contentHash !== undefined;
 }
+
+/**
+ * Videos uploaded into this project that sit in the shared library without an analysis yet (ADR 0019):
+ * Full AI can only find them by their file names until they are analyzed.
+ */
+export function unanalyzedUploads(
+  assets: readonly Pick<MediaAsset, "source" | "kind" | "contentHash">[],
+  items: readonly LibraryMedia[],
+): LibraryMedia[] {
+  const uploaded = new Set(
+    assets.flatMap((asset) =>
+      asset.source === "upload" && asset.kind === "video" && asset.contentHash ? [asset.contentHash] : [],
+    ),
+  );
+  return items.filter(
+    (item) =>
+      item.source === "upload" && item.kind === "video" && !item.analysis && uploaded.has(item.contentHash),
+  );
+}
