@@ -1,16 +1,16 @@
 "use client";
 
-import type {
-  MediaAsset,
-  MediaCandidate,
-  MediaSourceFilter,
-  SearchLanguage,
-  VisualPlan,
+import {
+  candidateKey,
+  type MediaCandidate,
+  type MediaSourceFilter,
+  type SearchLanguage,
+  type VisualPlan,
 } from "@studio/domain";
 import { useCallback, useState } from "react";
 
-import { importCandidate, searchMedia, type MediaSearchResult } from "../api";
-import { ALL_SOURCES, initialSearch, queryForLanguage, type KeywordGroup } from "../model";
+import { importCandidate, searchMedia, type MediaSearchResult, type PickedMedia } from "../api";
+import { ALL_SOURCES, initialSearch, pickedCandidate, queryForLanguage, type KeywordGroup } from "../model";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : "Đã có lỗi xảy ra.");
 
@@ -20,7 +20,7 @@ export type SourceChoice = "all" | MediaSourceFilter;
 export function useMediaSearch(
   projectId: string,
   plan: VisualPlan | undefined,
-  onPicked: (asset: MediaAsset) => void,
+  onPicked: (picked: PickedMedia) => void,
   /** Keywords from the narration, used when the scene has no AI keywords. */
   fallback: KeywordGroup | null = null,
 ) {
@@ -76,15 +76,10 @@ export function useMediaSearch(
 
   const pick = useCallback(
     async (candidate: MediaCandidate) => {
-      setPicking(`${candidate.provider}:${candidate.ref}`);
+      setPicking(candidateKey(candidate));
       setError(null);
       try {
-        const asset = await importCandidate(
-          projectId,
-          { provider: candidate.provider, ref: candidate.ref, kind: candidate.kind },
-          query.trim(),
-        );
-        onPicked(asset);
+        onPicked(await importCandidate(projectId, pickedCandidate(candidate), query.trim()));
       } catch (cause) {
         setError(message(cause));
       } finally {

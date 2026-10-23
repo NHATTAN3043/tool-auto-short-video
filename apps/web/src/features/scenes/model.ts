@@ -81,7 +81,7 @@ export type EditorAction =
   | { type: "move"; sceneId: string; offset: -1 | 1 }
   | { type: "split"; sceneId: string }
   | { type: "mergeNext"; sceneId: string }
-  | { type: "assignMedia"; sceneId: string; assetId: string }
+  | { type: "assignMedia"; sceneId: string; assetId: string; sourceStartMs?: number }
   | { type: "updateMedia"; sceneId: string; patch: SceneMediaPatch }
   | { type: "clearMedia"; sceneId: string }
   | { type: "addSfx"; sceneId: string; assetId: string }
@@ -249,7 +249,10 @@ function applyContent(project: Project, action: ContentAction, ctx: DomainContex
     case "mergeNext":
       return mergeWithNext(project, action.sceneId);
     case "assignMedia":
-      return assignMedia(project, action.sceneId, { assetId: action.assetId });
+      return assignMedia(project, action.sceneId, {
+        assetId: action.assetId,
+        ...(action.sourceStartMs !== undefined && { sourceStartMs: action.sourceStartMs }),
+      });
     case "updateMedia":
       return updateSceneMedia(project, action.sceneId, action.patch);
     case "clearMedia":

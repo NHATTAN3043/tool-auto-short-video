@@ -2,8 +2,10 @@ import {
   narrationKeywords,
   type ContentLanguage,
   type LibrarySource,
+  type MediaCandidate,
   type MediaLink,
   type MediaSourceFilter,
+  type PickedCandidate,
   type SearchLanguage,
   type VisualPlan,
 } from "@studio/domain";
@@ -29,6 +31,31 @@ export const LIBRARY_SOURCE_LABELS: Record<LibrarySource, string> = {
   pixabay: "Pixabay",
   upload: "Tự tải",
 };
+
+/** What the server needs to import a candidate: never a URL; a shot is named by its number only. */
+export function pickedCandidate(candidate: MediaCandidate): PickedCandidate {
+  return {
+    provider: candidate.provider,
+    ref: candidate.ref,
+    kind: candidate.kind,
+    ...(candidate.segment && { segmentIndex: candidate.segment.index }),
+  };
+}
+
+/** The preview to play: a shot of a clip plays only its own stretch (a media fragment). */
+export function previewUrl(candidate: MediaCandidate): string {
+  const url = linkUrl(candidate.preview ?? candidate.thumbnail);
+  const segment = candidate.segment;
+  return segment ? `${url}#t=${String(segment.startMs / 1000)},${String(segment.endMs / 1000)}` : url;
+}
+
+/** `Đoạn 4 · 0:12` for a shot of a clip, nothing for a whole file. */
+export function segmentLabel(candidate: MediaCandidate): string | null {
+  const segment = candidate.segment;
+  if (!segment) return null;
+  const seconds = Math.floor(segment.startMs / 1000);
+  return `Đoạn ${String(segment.index + 1)} · ${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, "0")}`;
+}
 
 /** Every source, own files first: what "Tất cả nguồn" searches. */
 export const ALL_SOURCES: MediaSourceFilter[] = ["project", "library", "pexels", "pixabay"];

@@ -2,12 +2,12 @@
 
 import {
   AI_RANK_MAX_CANDIDATES,
+  candidateKey,
   isOwnCandidate,
   orderByRanking,
   SearchLanguageSchema,
   toRankCandidate,
   type ContentLanguage,
-  type MediaAsset,
   type MediaCandidate,
   type MediaRankingMode,
   type SearchLanguage,
@@ -31,6 +31,7 @@ import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 
+import type { PickedMedia } from "../api";
 import { useMediaSearch, type MediaSearchState, type SourceChoice } from "../hooks/use-media-search";
 import {
   formatDuration,
@@ -38,6 +39,8 @@ import {
   LANGUAGE_LABELS,
   linkUrl,
   narrationKeywordGroup,
+  previewUrl,
+  segmentLabel,
   orientationLabel,
   SOURCE_LABELS,
 } from "../model";
@@ -80,6 +83,14 @@ function CandidateCard({
           {orientationLabel(candidate.width, candidate.height)}
           {candidate.durationMs !== undefined ? ` · ${formatDuration(candidate.durationMs)}` : ""}
         </span>
+        {segmentLabel(candidate) ? (
+          <span className="w-full text-xs text-muted-foreground">{segmentLabel(candidate)}</span>
+        ) : null}
+        {candidate.textOverlay === true ? (
+          <Badge variant="outline" title="Hình có chữ, phụ đề hoặc logo in sẵn">
+            Có chữ/logo
+          </Badge>
+        ) : null}
       </div>
       <Button size="xs" className="m-1.5 mt-0" disabled={disabled} onClick={onPick}>
         {picking ? "Đang tải về…" : "Chọn cho cảnh"}
@@ -278,7 +289,7 @@ export function SceneMediaSearch({
   narration: string;
   /** The project language, for the free keywords. */
   language: ContentLanguage;
-  onPicked: (asset: MediaAsset) => void;
+  onPicked: (picked: PickedMedia) => void;
   /** Null hides the AI keyword button (no AI provider). */
   keywordSuggest?: KeywordSuggestOptions | null;
   /** Null hides AI ranking (no AI provider or the mediaRanking toggle is off). */
@@ -291,8 +302,8 @@ export function SceneMediaSearch({
   const search = useMediaSearch(
     projectId,
     visualPlan,
-    (asset) => {
-      onPicked(asset);
+    (picked) => {
+      onPicked(picked);
       setPreview(null);
       setOpen(false);
     },
@@ -458,7 +469,7 @@ export function SceneMediaSearch({
       {search.result && search.result.candidates.length > 0 ? (
         <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5">
           {ranking.candidates.map((candidate) => {
-            const key = `${candidate.provider}:${candidate.ref}`;
+            const key = candidateKey(candidate);
             return (
               <CandidateCard
                 key={key}
@@ -494,8 +505,8 @@ export function SceneMediaSearch({
           {preview ? (
             preview.kind === "video" ? (
               <video
-                key={`${preview.provider}:${preview.ref}`}
-                src={linkUrl(preview.preview ?? preview.thumbnail)}
+                key={candidateKey(preview)}
+                src={previewUrl(preview)}
                 poster={linkUrl(preview.thumbnail)}
                 controls
                 autoPlay

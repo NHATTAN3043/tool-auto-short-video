@@ -1,6 +1,6 @@
 "use client";
 
-import { hasVoiceConflict, projectLanguage, type MediaAsset, type Project } from "@studio/domain";
+import { hasVoiceConflict, projectLanguage, type Project } from "@studio/domain";
 import {
   ArrowLeftIcon,
   AudioLinesIcon,
@@ -20,7 +20,7 @@ import { useCallback, useState, type KeyboardEvent, type ReactNode } from "react
 import { AiAssistantPanel } from "@/features/ai";
 import { FullAiLock, FullAiPanel, useFullAi } from "@/features/full-ai";
 import { AudioSettings, MediaLibrary } from "@/features/media";
-import { SceneMediaSearch, SharedMediaLibrary } from "@/features/media-search";
+import { SceneMediaSearch, SharedMediaLibrary, type PickedMedia } from "@/features/media-search";
 import { PreviewPanel, StyleSettings, usePreview, WatermarkSettings } from "@/features/preview";
 import { MODE_LABELS, ProjectSettingsDialog } from "@/features/project";
 import { RenderPanel } from "@/features/render";
@@ -97,9 +97,9 @@ export function ProjectWorkspace({
   const projectId = editor.project.id;
   const { assetAdded, addSfx, assignMedia } = editor;
   const pickMedia = useCallback(
-    (sceneId: string, asset: MediaAsset) => {
+    (sceneId: string, { asset, startMs }: PickedMedia) => {
       assetAdded(asset);
-      assignMedia(sceneId, asset.id);
+      assignMedia(sceneId, asset.id, startMs);
     },
     [assetAdded, assignMedia],
   );

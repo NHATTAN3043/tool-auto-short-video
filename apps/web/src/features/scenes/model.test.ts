@@ -232,6 +232,17 @@ describe("editor reducer: media", () => {
     expect(run(trimmed, { type: "clearMedia", sceneId: "a" }).project.scenes[0]?.media).toBeUndefined();
   });
 
+  it("starts a picked shot of a clip where the shot starts (ADR 0019)", () => {
+    const assigned = run(withAssets(), {
+      type: "assignMedia",
+      sceneId: "a",
+      assetId: "vid",
+      sourceStartMs: 12_500,
+    });
+    expect(assigned.project.scenes[0]?.media).toMatchObject({ assetId: "vid", sourceStartMs: 12_500 });
+    expect(assigned.project.scenes[0]?.media?.sourceEndMs).toBeUndefined();
+  });
+
   it("groups a slider drag into one undo step", () => {
     const assigned = run(withAssets(), { type: "assignMedia", sceneId: "a", assetId: "vid" });
     const dragged = run(

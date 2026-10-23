@@ -69,6 +69,8 @@ export const MediaCandidateSchema = z.object({
   description: z.string().max(500).optional(),
   /** Set when the candidate is one shot of a clip rather than the whole file. */
   segment: MediaSegmentSchema.optional(),
+  /** The shot has burnt-in text, subtitles or another channel's logo: picked only when nothing clean fits. */
+  textOverlay: z.boolean().optional(),
 });
 export type MediaCandidate = z.infer<typeof MediaCandidateSchema>;
 
@@ -230,6 +232,24 @@ export function searchLibraryMatches(
         Number(portraitItem(b.item)) - Number(portraitItem(a.item)) ||
         b.item.usageCount - a.item.usageCount,
     );
+}
+
+/**
+ * The order Full AI tries a scene's usable candidates in (ADR 0019): the ranked order, but shots already
+ * given to another scene are left out (the same moment twice looks like a mistake), and shots with burnt-in
+ * text come after every clean candidate.
+ */
+export function selectionOrder(
+  candidates: readonly MediaCandidate[],
+  usedKeys: ReadonlySet<string>,
+): MediaCandidate[] {
+  const fresh = candidates.filter(
+    (candidate) => !candidate.segment || !usedKeys.has(candidateKey(candidate)),
+  );
+  return [
+    ...fresh.filter((candidate) => candidate.textOverlay !== true),
+    ...fresh.filter((candidate) => candidate.textOverlay === true),
+  ];
 }
 
 /**

@@ -57,9 +57,13 @@ export function makeResolveRankImages(deps: {
   storage: StoragePort;
   providers: readonly MediaSearchPort[];
 }): ResolveRankImages {
-  async function libraryImage(id: string): Promise<RankImage | null> {
+  async function libraryImage(id: string, shot?: number): Promise<RankImage | null> {
     const item = await deps.library.get(id).catch(() => null);
-    const relative = item?.thumbnailPath ?? (item?.kind === "image" ? item.path : undefined);
+    // A shot of an analyzed clip is judged by its own still, not by the clip's first second.
+    const relative =
+      shot !== undefined
+        ? item?.analysis?.shots[shot]?.thumbnailPath
+        : (item?.thumbnailPath ?? (item?.kind === "image" ? item.path : undefined));
     return relative === undefined ? null : storedImage(libraryMediaKey(relative));
   }
 
@@ -96,7 +100,7 @@ export function makeResolveRankImages(deps: {
           link.type === "remote"
             ? remoteImage(link.url)
             : link.type === "library"
-              ? await libraryImage(link.id)
+              ? await libraryImage(link.id, link.file === "shot" ? (link.shot ?? 0) : undefined)
               : await projectImage(link.projectId, link.assetId);
         if (image) images.set(candidate.key, image);
       }

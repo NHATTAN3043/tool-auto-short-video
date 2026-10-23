@@ -172,8 +172,14 @@ export function useProjectEditor(initial: Project) {
     mergeWithNext: (sceneId: string) => {
       dispatch({ type: "mergeNext", sceneId });
     },
-    assignMedia: (sceneId: string, assetId: string) => {
-      dispatch({ type: "assignMedia", sceneId, assetId });
+    /** `sourceStartMs`: where the scene starts in a video, e.g. the start of a picked shot. */
+    assignMedia: (sceneId: string, assetId: string, sourceStartMs?: number) => {
+      dispatch({
+        type: "assignMedia",
+        sceneId,
+        assetId,
+        ...(sourceStartMs !== undefined && { sourceStartMs }),
+      });
     },
     updateMedia: (sceneId: string, patch: SceneMediaPatch) => {
       dispatch({ type: "updateMedia", sceneId, patch });

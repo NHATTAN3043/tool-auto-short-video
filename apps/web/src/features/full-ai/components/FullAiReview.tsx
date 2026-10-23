@@ -4,7 +4,6 @@ import {
   formatUsd,
   projectLanguage,
   type FullAiResult,
-  type MediaAsset,
   type Project,
   type RenderJob,
   type SkillSummary,
@@ -14,7 +13,7 @@ import Link from "next/link";
 import { useCallback, useState } from "react";
 
 import { AiConfirmDialog, useAiTask } from "@/features/ai";
-import { SceneMediaSearch } from "@/features/media-search";
+import { SceneMediaSearch, type PickedMedia } from "@/features/media-search";
 import { SaveIndicator } from "@/features/scenes/components/SaveIndicator";
 import { useProjectEditor } from "@/features/scenes/hooks/use-project-editor";
 import {
@@ -67,9 +66,9 @@ export function FullAiReview({
   const { assetAdded, assignMedia } = editor;
 
   const pickMedia = useCallback(
-    (sceneId: string, asset: MediaAsset) => {
+    (sceneId: string, { asset, startMs }: PickedMedia) => {
       assetAdded(asset);
-      assignMedia(sceneId, asset.id);
+      assignMedia(sceneId, asset.id, startMs);
     },
     [assetAdded, assignMedia],
   );

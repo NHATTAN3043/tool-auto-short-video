@@ -127,6 +127,7 @@ export {
   MEDIA_LIBRARY_ROOT,
   type ImportCandidateDeps,
   type ImportCandidateInput,
+  type ImportCandidateResult,
 } from "./media-search/import-candidate";
 export {
   makeListLibraryMedia,

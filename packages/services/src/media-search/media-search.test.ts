@@ -18,7 +18,9 @@ import {
   InMemoryMediaLibrary,
   InMemoryProjectRepository,
   InMemoryStorage,
+  oneChunk,
 } from "../testing";
+import { makeResolveRankImages } from "../ai/rank-images";
 import { makeImportCandidate } from "./import-candidate";
 import { makeReadLibraryMediaFile, makeRemoveLibraryMedia, makeSetLibraryMediaTags } from "./media-library";
 import { makeProxyStockMedia } from "./proxy-stock-media";
@@ -219,6 +221,137 @@ describe("searchMedia", () => {
       },
     });
     expect(await refs()).toEqual(["library:lib_cat"]);
+  });
+
+  it("offers the best shots of an analyzed clip, at most three per clip, and starts the scene at the shot", async () => {
+    const s = await setup("manual");
+    const shots = Array.from({ length: 5 }, (_, index) => ({
+      index,
+      startMs: index * 2000,
+      endMs: (index + 1) * 2000,
+      description: index === 4 ? "A dog running" : "A cat sleeping",
+      tags: index === 4 ? ["dog"] : ["cat sleeping"],
+      textOverlay: index === 1,
+    }));
+    await s.library.add({
+      id: "lib_clip",
+      kind: "video",
+      fileName: "7389101112.mp4",
+      path: "files/lib_clip.mp4",
+      durationMs: 10_000,
+      width: 1080,
+      height: 1920,
+      tags: ["7389101112"],
+      usageCount: 0,
+      source: "upload",
+      sourceRef: uploadSourceRef("sha256:clip"),
+      contentHash: "sha256:clip",
+      analysis: { shots, model: "m", analyzedAt: "2026-10-10T00:00:00.000Z" },
+      createdAt: "2026-10-10T00:00:00.000Z",
+    });
+    await s.storage.write("library/media/files/lib_clip.mp4", oneChunk(new Uint8Array([1])));
+    const result = await s.search({
+      projectId: "prj_1",
+      query: { ...query, query: "cat sleeping", sources: ["library"] },
+    });
+
+    // Four shots match; the three best are offered, the one with text after the clean ones.
+    expect(result.candidates.map((c) => c.segment?.index)).toEqual([0, 2, 3]);
+    expect(result.candidates[0]).toEqual({
+      provider: "library",
+      ref: "lib_clip",
+      kind: "video",
+      width: 1080,
+      height: 1920,
+      durationMs: 2000,
+      thumbnail: { type: "library", id: "lib_clip", file: "shot", shot: 0 },
+      preview: { type: "library", id: "lib_clip", file: "media" },
+      segment: { index: 0, startMs: 0, endMs: 2000 },
+      description: "A cat sleeping · cat sleeping",
+    });
+
+    const picked = await s.importCandidate({
+      projectId: "prj_1",
+      candidate: { provider: "library", ref: "lib_clip", kind: "video", segmentIndex: 3 },
+      query: "cat sleeping",
+    });
+    expect(picked.startMs).toBe(6000);
+    const again = await s.importCandidate({
+      projectId: "prj_1",
+      candidate: { provider: "library", ref: "lib_clip", kind: "video", segmentIndex: 0 },
+      query: "cat sleeping",
+    });
+    expect(again.asset.id).toBe(picked.asset.id);
+    expect(again.startMs).toBe(0);
+    await expect(
+      s.importCandidate({
+        projectId: "prj_1",
+        candidate: { provider: "library", ref: "lib_clip", kind: "video", segmentIndex: 9 },
+        query: "x",
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_MEDIA" });
+  });
+
+  it("sends the still of a shot, not the clip's thumbnail, to vision ranking", async () => {
+    const s = await setup("manual");
+    await s.library.add({
+      id: "lib_clip",
+      kind: "video",
+      fileName: "a.mp4",
+      path: "files/lib_clip.mp4",
+      thumbnailPath: "thumbnails/lib_clip.jpg",
+      tags: [],
+      usageCount: 0,
+      source: "upload",
+      sourceRef: uploadSourceRef("sha256:clip"),
+      contentHash: "sha256:clip",
+      analysis: {
+        shots: [
+          {
+            index: 0,
+            startMs: 0,
+            endMs: 2000,
+            description: "",
+            tags: [],
+            textOverlay: false,
+            thumbnailPath: "shots/lib_clip/j/frame-000.jpg",
+          },
+        ],
+        model: "m",
+        analyzedAt: "2026-10-10T00:00:00.000Z",
+      },
+      createdAt: "2026-10-10T00:00:00.000Z",
+    });
+    await s.storage.write("library/media/thumbnails/lib_clip.jpg", oneChunk(new Uint8Array([1])));
+    await s.storage.write("library/media/shots/lib_clip/j/frame-000.jpg", oneChunk(new Uint8Array([2, 2])));
+    const images = await makeResolveRankImages({
+      library: s.library,
+      repo: s.repo,
+      storage: s.storage,
+      providers: [],
+    })({
+      mode: "vision",
+      scenes: [
+        {
+          sceneId: "s1",
+          narration: "Mèo.",
+          candidates: [
+            {
+              key: "library:video:lib_clip#0",
+              kind: "video",
+              width: 1080,
+              height: 1920,
+              thumbnail: { type: "library", id: "lib_clip", file: "shot", shot: 0 },
+            },
+          ],
+        },
+      ],
+    });
+    expect(images.get("library:video:lib_clip#0")).toEqual({
+      type: "base64",
+      mediaType: "image/jpeg",
+      data: btoa("\u0002\u0002"),
+    });
   });
 
   it("never offers the channel logo as a scene's picture", async () => {

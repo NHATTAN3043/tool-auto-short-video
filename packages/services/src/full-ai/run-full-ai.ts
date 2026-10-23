@@ -8,6 +8,7 @@ import {
   assignMedia,
   candidateKey,
   capOwnCandidates,
+  selectionOrder,
   DEFAULT_MAX_WORDS_PER_SCENE,
   DomainError,
   FULL_AI_MAX_WARNINGS,
@@ -33,7 +34,6 @@ import {
   type ContentLanguage,
   type FullAiResult,
   type FullAiStep,
-  type MediaAsset,
   type MediaCandidate,
   type MediaRankRequest,
   type MediaSearchQuery,
@@ -43,7 +43,7 @@ import {
 } from "@studio/domain";
 
 import type { MediaSearchResult } from "../media-search/search-media";
-import type { ImportCandidateInput } from "../media-search/import-candidate";
+import type { ImportCandidateInput, ImportCandidateResult } from "../media-search/import-candidate";
 import { fullAiDraftKey } from "./draft";
 import { AiCallError, type AiPort } from "../ports/ai";
 import type { Clock } from "../ports/clock";
@@ -62,7 +62,7 @@ export interface RunFullAiDeps {
   /** Bound to the job, so CostGuard checks and logs every call. */
   ai: PaidPortFactory<AiPort>;
   searchMedia: (input: { projectId: string; query: MediaSearchQuery }) => Promise<MediaSearchResult>;
-  importCandidate: (input: ImportCandidateInput) => Promise<{ project: Project; asset: MediaAsset }>;
+  importCandidate: (input: ImportCandidateInput) => Promise<ImportCandidateResult>;
   rankImages: ResolveRankImages;
   /** Installed skills (ADR 0012); without it a requested skill is skipped with a warning. */
   skills?: SkillCatalogPort;
@@ -292,37 +292,53 @@ export function makeRunFullAi(deps: RunFullAiDeps) {
     async function selectMedia(): Promise<void> {
       const project = await deps.repo.get(projectId);
       const scenes = project.scenes.filter((scene) => found.has(scene.id));
+      // Shots of analyzed clips already given to a scene in this run (ADR 0019).
+      const usedShots = new Set<string>();
       for (const [index, scene] of scenes.entries()) {
         const entry = found.get(scene.id);
         if (!entry) continue;
-        const usable = entry.candidates.filter((candidate) => !entry.rejected.has(candidateKey(candidate)));
+        const usable = selectionOrder(
+          entry.candidates.filter((candidate) => !entry.rejected.has(candidateKey(candidate))),
+          usedShots,
+        );
         if (usable.length === 0) {
           // The AI found nothing fitting: an empty scene is better than a wrong picture.
           warn(`${sceneLabel(project, scene.id)}: AI thấy không media nào phù hợp, hãy chọn tay`);
           input.onProgress(stepProgress((index + 1) / scenes.length));
           continue;
         }
-        let asset: MediaAsset | null = null;
+        let picked: { result: ImportCandidateResult; candidate: MediaCandidate } | null = null;
         let lastError = "";
         for (const candidate of usable.slice(0, IMPORT_ATTEMPTS)) {
           try {
-            ({ asset } = await deps.importCandidate({
+            const result = await deps.importCandidate({
               projectId,
-              candidate: { provider: candidate.provider, ref: candidate.ref, kind: candidate.kind },
+              candidate: {
+                provider: candidate.provider,
+                ref: candidate.ref,
+                kind: candidate.kind,
+                ...(candidate.segment && { segmentIndex: candidate.segment.index }),
+              },
               query: entry.query,
-            }));
+            });
+            picked = { result, candidate };
             break;
           } catch (error) {
             lastError = errorMessage(error);
           }
         }
-        if (asset) {
-          const assetId = asset.id;
+        if (picked) {
+          const { asset, startMs } = picked.result;
+          const media = { assetId: asset.id, ...(startMs !== undefined && { sourceStartMs: startMs }) };
           await update((stored) =>
             stored.scenes.some((candidate) => candidate.id === scene.id)
-              ? assignMedia(stored, scene.id, { assetId })
+              ? assignMedia(stored, scene.id, media)
               : stored,
           );
+          if (picked.candidate.segment) usedShots.add(candidateKey(picked.candidate));
+          if (picked.candidate.textOverlay === true) {
+            warn(`${sceneLabel(project, scene.id)}: đoạn được chọn có chữ/logo in sẵn, hãy kiểm tra lại`);
+          }
         } else {
           warn(`${sceneLabel(project, scene.id)}: không tải được media (${lastError})`);
         }

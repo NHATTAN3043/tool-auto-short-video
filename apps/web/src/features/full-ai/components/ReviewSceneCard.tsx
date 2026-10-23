@@ -1,12 +1,12 @@
 "use client";
 
-import type { MediaAsset, MediaCandidate, Project, Scene } from "@studio/domain";
+import { candidateKey, type MediaCandidate, type Project, type Scene } from "@studio/domain";
 import { CheckIcon, ImagesIcon, PenLineIcon, Undo2Icon } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 
 import { projectFileUrl } from "@/features/media/api";
-import { importCandidate } from "@/features/media-search/api";
-import { linkUrl, SOURCE_LABELS } from "@/features/media-search/model";
+import { importCandidate, type PickedMedia } from "@/features/media-search/api";
+import { linkUrl, pickedCandidate, SOURCE_LABELS } from "@/features/media-search/model";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent } from "@/shared/ui/card";
@@ -44,7 +44,7 @@ function Alternatives({
   projectId: string;
   scene: Scene;
   candidates: readonly MediaCandidate[];
-  onPicked: (asset: MediaAsset) => void;
+  onPicked: (picked: PickedMedia) => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +55,7 @@ function Alternatives({
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap gap-2">
         {candidates.map((candidate) => {
-          const key = `${candidate.provider}:${candidate.ref}`;
+          const key = candidateKey(candidate);
           return (
             <button
               key={key}
@@ -68,7 +68,7 @@ function Alternatives({
                 setError(null);
                 importCandidate(
                   projectId,
-                  { provider: candidate.provider, ref: candidate.ref, kind: candidate.kind },
+                  pickedCandidate(candidate),
                   scene.visualPlan?.searchQueries[0] ?? "full ai",
                 )
                   .then(onPicked)
@@ -104,7 +104,7 @@ function Alternatives({
 
 export interface ReviewSceneActions {
   onApprove: (sceneId: string, approved: boolean) => void;
-  onMediaPicked: (sceneId: string, asset: MediaAsset) => void;
+  onMediaPicked: (sceneId: string, picked: PickedMedia) => void;
   /** Null when rewriting is not available (no AI or the scriptGeneration toggle is off). */
   onRewrite: ((sceneId: string, instruction: string) => void) | null;
 }
@@ -215,8 +215,8 @@ export function ReviewSceneCard({
               projectId={project.id}
               scene={scene}
               candidates={alternatives}
-              onPicked={(asset) => {
-                actions.onMediaPicked(scene.id, asset);
+              onPicked={(picked) => {
+                actions.onMediaPicked(scene.id, picked);
                 setChangingMedia(false);
               }}
             />

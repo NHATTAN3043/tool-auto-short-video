@@ -1,10 +1,12 @@
 import {
   ownTwinFilters,
   rankCandidates,
-  searchLibrary,
+  searchLibraryMatches,
   searchProjectAssets,
   tagsFromFileName,
   watermarkAssetId,
+  type ClipShot,
+  type LibraryMatch,
   type LibraryMedia,
   type MediaAsset,
   type MediaCandidate,
@@ -19,6 +21,8 @@ import type { ProjectRepository } from "../ports/project-repository";
 export const PROJECT_RESULTS = 12;
 export const LIBRARY_RESULTS = 12;
 export const STOCK_RESULTS_PER_PROVIDER = 15;
+/** Best shots offered from one analyzed clip, so one long clip cannot take every library place. */
+export const SHOTS_PER_CLIP = 3;
 
 export interface MediaSearchDeps {
   repo: ProjectRepository;
@@ -48,6 +52,46 @@ export function libraryCandidate(item: LibraryMedia): MediaCandidate {
   if (item.durationMs !== undefined) candidate.durationMs = item.durationMs;
   if (item.tags.length > 0) candidate.description = item.tags.join(", ").slice(0, 500);
   return candidate;
+}
+
+/**
+ * One shot of an analyzed library video (ADR 0019): its still, its length and its description. Picking it
+ * starts the scene at the shot's start.
+ */
+export function shotCandidate(item: LibraryMedia, shot: ClipShot): MediaCandidate {
+  const candidate: MediaCandidate = {
+    provider: "library",
+    ref: item.id,
+    kind: "video",
+    width: item.width ?? 1080,
+    height: item.height ?? 1920,
+    durationMs: shot.endMs - shot.startMs,
+    thumbnail: { type: "library", id: item.id, file: "shot", shot: shot.index },
+    preview: { type: "library", id: item.id, file: "media" },
+    segment: { index: shot.index, startMs: shot.startMs, endMs: shot.endMs },
+  };
+  const description = [shot.description, shot.tags.join(", ")].filter((part) => part !== "").join(" · ");
+  if (description !== "") candidate.description = description.slice(0, 500);
+  if (shot.textOverlay) candidate.textOverlay = true;
+  return candidate;
+}
+
+/** Library matches as candidates: at most SHOTS_PER_CLIP shots of each clip, the best ones. */
+function libraryCandidates(matches: readonly LibraryMatch[], limit: number): MediaCandidate[] {
+  const shotsTaken = new Map<string, number>();
+  const result: MediaCandidate[] = [];
+  for (const match of matches) {
+    if (result.length >= limit) break;
+    if (!match.shot) {
+      result.push(libraryCandidate(match.item));
+      continue;
+    }
+    const taken = shotsTaken.get(match.item.id) ?? 0;
+    if (taken >= SHOTS_PER_CLIP) continue;
+    shotsTaken.set(match.item.id, taken + 1);
+    result.push(shotCandidate(match.item, match.shot));
+  }
+  return result;
 }
 
 /** A file the user uploaded to this project, offered by the tags in its name. */
@@ -103,9 +147,10 @@ export function makeSearchMedia(deps: MediaSearchDeps) {
           .map((asset) => projectCandidate(project.id, asset))
       : [];
     const library = query.sources.includes("library")
-      ? searchLibrary(items.filter(twins.keepItem), query.query, query.kind)
-          .slice(0, LIBRARY_RESULTS)
-          .map(libraryCandidate)
+      ? libraryCandidates(
+          searchLibraryMatches(items.filter(twins.keepItem), query.query, query.kind),
+          LIBRARY_RESULTS,
+        )
       : [];
 
     const bySourceRef = new Map(items.map((item) => [item.sourceRef, item.id]));

@@ -1,3 +1,4 @@
+import type { MediaCandidate } from "@studio/domain";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -8,6 +9,9 @@ import {
   narrationKeywordGroup,
   orientationLabel,
   parseTags,
+  pickedCandidate,
+  previewUrl,
+  segmentLabel,
   queryForLanguage,
 } from "./model";
 
@@ -57,5 +61,38 @@ describe("media search model", () => {
     expect(orientationLabel(1080, 1920)).toBe("Dọc");
     expect(orientationLabel(1920, 1080)).toBe("Ngang");
     expect(parseTags(" mèo, , 小猫 ")).toEqual(["mèo", "小猫"]);
+  });
+});
+
+describe("shots of analyzed clips (ADR 0019)", () => {
+  const shot: MediaCandidate = {
+    provider: "library",
+    ref: "lib_1",
+    kind: "video",
+    width: 1080,
+    height: 1920,
+    thumbnail: { type: "library", id: "lib_1", file: "shot", shot: 3 },
+    preview: { type: "library", id: "lib_1", file: "media" },
+    segment: { index: 3, startMs: 72_000, endMs: 75_500 },
+  };
+  const whole: MediaCandidate = { ...shot, thumbnail: { type: "library", id: "lib_1", file: "thumbnail" } };
+  delete whole.segment;
+
+  it("names the shot by its number only when picking, never by its times", () => {
+    expect(pickedCandidate(shot)).toEqual({
+      provider: "library",
+      ref: "lib_1",
+      kind: "video",
+      segmentIndex: 3,
+    });
+    expect(pickedCandidate(whole)).toEqual({ provider: "library", ref: "lib_1", kind: "video" });
+  });
+
+  it("plays only the shot's stretch and labels it", () => {
+    expect(previewUrl(shot)).toBe("/api/media-library/lib_1/file?file=media#t=72,75.5");
+    expect(previewUrl(whole)).toBe("/api/media-library/lib_1/file?file=media");
+    expect(linkUrl(shot.thumbnail)).toBe("/api/media-library/lib_1/file?file=shot&shot=3");
+    expect(segmentLabel(shot)).toBe("Đoạn 4 · 1:12");
+    expect(segmentLabel(whole)).toBeNull();
   });
 });

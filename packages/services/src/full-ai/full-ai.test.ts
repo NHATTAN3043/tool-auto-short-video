@@ -1,4 +1,5 @@
 import {
+  uploadSourceRef,
   AI_RANK_MAX_CANDIDATES,
   createProject,
   DomainError,
@@ -30,6 +31,7 @@ import {
   InMemoryMediaLibrary,
   InMemoryProjectRepository,
   InMemoryStorage,
+  oneChunk,
 } from "../testing";
 import { makeGenerateSceneVoices } from "../voice/generate-scene-voices";
 import { fullAiDraftKey, makeDeleteFullAiDraft, makeGetFullAiDraft, makeSaveFullAiDraft } from "./draft";
@@ -109,6 +111,7 @@ async function setup(options: { settings?: AutomationSettings; project?: Partial
   return {
     repo,
     storage,
+    library,
     queue,
     ai,
     tts,
@@ -220,6 +223,62 @@ describe("Full AI", () => {
     expect(project.scenes[0]?.media?.assetId).toBe(`ast_up${String(AI_RANK_MAX_CANDIDATES - 4)}`);
     // Twelve uploads, the stock image of scene 2 and two voices.
     expect(project.assets).toHaveLength(12 + 1 + 2);
+  });
+
+  it("picks shots of an analyzed clip: clean first, each shot once, burnt-in text last with a warning", async () => {
+    const s = await setup();
+    const shot = (index: number, startMs: number, endMs: number, textOverlay: boolean) => ({
+      index,
+      startMs,
+      endMs,
+      description: "A cat",
+      tags: ["cat"],
+      textOverlay,
+    });
+    await s.library.add({
+      id: "lib_clip",
+      kind: "video",
+      fileName: "downloaded.mp4",
+      path: "files/lib_clip.mp4",
+      durationMs: 9000,
+      width: 1080,
+      height: 1920,
+      tags: [],
+      usageCount: 0,
+      source: "upload",
+      sourceRef: uploadSourceRef("sha256:clip"),
+      contentHash: "sha256:clip",
+      analysis: {
+        shots: [shot(0, 0, 2000, false), shot(1, 2000, 5000, true), shot(2, 5000, 9000, false)].map(
+          (one, i) => (i === 0 ? { ...one, description: "A dog", tags: ["dog"] } : one),
+        ),
+        model: "m",
+        analyzedAt: "2026-10-10T00:00:00.000Z",
+      },
+      createdAt: "2026-10-10T00:00:00.000Z",
+    });
+    await s.storage.write("library/media/files/lib_clip.mp4", oneChunk(new Uint8Array([7])));
+    // Both scenes want a cat video; every stock video is rejected, so only the clip's shots are left.
+    s.ai.scenes = {
+      scenes: ["Mèo một.", "Mèo hai."].map((narration) => ({
+        narration,
+        visualPlan: { intent: "Mèo", preferredMedia: "video" as const, searchQueries: ["cat"] },
+      })),
+    };
+    s.ai.rejectKeys = ["pexels:video:v1", "pexels:video:v2", "pexels:video:v3"];
+    const job = await s.request({ projectId: "prj_1", request });
+    await s.run();
+
+    const project = await s.repo.get("prj_1");
+    // Scene 1: the clean shot 3 (5s in). Scene 2: shot 2 is the only one left, it has text.
+    expect(project.scenes.map((scene) => scene.media?.sourceStartMs)).toEqual([5000, 2000]);
+    expect(project.scenes[0]?.media?.assetId).toBe(project.scenes[1]?.media?.assetId);
+    expect(project.assets.filter((asset) => asset.fileName === "downloaded.mp4")).toHaveLength(1);
+    const result = await s.getResult({ projectId: "prj_1", jobId: job.id });
+    expect(result.warnings).toEqual(["Cảnh 2: đoạn được chọn có chữ/logo in sẵn, hãy kiểm tra lại"]);
+    expect(
+      result.scenes[0]?.candidates.filter((candidate) => candidate.segment).map((c) => c.segment?.index),
+    ).toEqual([1, 2]);
   });
 
   it("skips the steps whose toggle is off and uses the project's script", async () => {

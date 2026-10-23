@@ -25,6 +25,7 @@ import {
   scoreTags,
   searchLibrary,
   searchLibraryMatches,
+  selectionOrder,
   searchProjectAssets,
   tagsFromFileName,
   type MediaCandidate,
@@ -333,5 +334,34 @@ describe("ownTwinFilters / belongsInLibrary", () => {
     expect(belongsInLibrary({ kind: "video" })).toBe(false);
     expect(belongsInLibrary({ kind: "image", contentHash: "sha256:a" })).toBe(false);
     expect(belongsInLibrary({ kind: "audio", contentHash: "sha256:a" })).toBe(false);
+  });
+});
+
+describe("selectionOrder", () => {
+  const shotOf = (ref: string, index: number, textOverlay = false): MediaCandidate =>
+    candidate("library", ref, 1080, 1920, {
+      segment: { index, startMs: index * 3000, endMs: (index + 1) * 3000 },
+      ...(textOverlay && { textOverlay: true }),
+    });
+
+  it("keeps the ranked order, clean candidates before shots with burnt-in text", () => {
+    const order = selectionOrder(
+      [shotOf("lib_1", 0, true), candidate("pexels", "p1", 1080, 1920), shotOf("lib_1", 1)],
+      new Set(),
+    );
+    expect(order.map(candidateKey)).toEqual([
+      "pexels:video:p1",
+      "library:video:lib_1#1",
+      "library:video:lib_1#0",
+    ]);
+  });
+
+  it("leaves out shots already given to another scene, but not whole files", () => {
+    const whole = candidate("library", "lib_2", 1080, 1920);
+    const used = new Set(["library:video:lib_1#0", "library:video:lib_2"]);
+    expect(selectionOrder([shotOf("lib_1", 0), shotOf("lib_1", 1), whole], used).map(candidateKey)).toEqual([
+      "library:video:lib_1#1",
+      "library:video:lib_2",
+    ]);
   });
 });

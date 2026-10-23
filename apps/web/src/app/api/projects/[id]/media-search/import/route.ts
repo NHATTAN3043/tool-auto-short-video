@@ -12,14 +12,14 @@ const ImportBodySchema = z.object({ candidate: PickedCandidateSchema, query: z.s
 
 /**
  * Makes the picked candidate a project asset (downloading stock into the shared library first) and
- * returns it. Assigning it to the scene is the editor's job, so only that scene changes.
+ * returns it, with where the scene starts in it when the pick is one shot of an analyzed clip. Assigning it to the scene is the editor's job, so only that scene changes.
  */
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const { id } = await params;
     const { candidate, query } = await parseJsonBody(request, ImportBodySchema);
-    const { asset } = await getContainer().importMediaCandidate({ projectId: id, candidate, query });
-    return jsonOk({ asset }, 201);
+    const { asset, startMs } = await getContainer().importMediaCandidate({ projectId: id, candidate, query });
+    return jsonOk({ asset, ...(startMs !== undefined && { startMs }) }, 201);
   } catch (error) {
     return toErrorResponse(error);
   }

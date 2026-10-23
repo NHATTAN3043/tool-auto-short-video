@@ -49,6 +49,13 @@ export interface ImportCandidateInput {
   query: string;
 }
 
+export interface ImportCandidateResult {
+  project: Project;
+  asset: MediaAsset;
+  /** Where the scene should start in the video: the start of the picked shot of an analyzed clip. */
+  startMs?: number;
+}
+
 const extensionOf = (path: string) => path.split(".").at(-1) ?? "bin";
 
 /**
@@ -191,7 +198,7 @@ export function makeImportCandidate(deps: ImportCandidateDeps) {
     }
   }
 
-  return async (input: ImportCandidateInput): Promise<{ project: Project; asset: MediaAsset }> => {
+  return async (input: ImportCandidateInput): Promise<ImportCandidateResult> => {
     const { candidate } = input;
     if (candidate.provider === "project") {
       // Already the project's own file: nothing to download or copy.
@@ -201,7 +208,16 @@ export function makeImportCandidate(deps: ImportCandidateDeps) {
       return { project, asset };
     }
     if (candidate.provider === "library") {
-      return copyToProject(input.projectId, await deps.library.get(candidate.ref));
+      const item = await deps.library.get(candidate.ref);
+      if (candidate.segmentIndex === undefined) return copyToProject(input.projectId, item);
+      // The shot's times come from the library, never from the request (ADR 0019).
+      const shot = item.analysis?.shots[candidate.segmentIndex];
+      if (!shot)
+        throw new DomainError(
+          "INVALID_MEDIA",
+          `Đoạn ${String(candidate.segmentIndex)} không còn trong video`,
+        );
+      return { ...(await copyToProject(input.projectId, item)), startMs: shot.startMs };
     }
     const project = await deps.repo.get(input.projectId);
     const providerId: StockProvider = candidate.provider;

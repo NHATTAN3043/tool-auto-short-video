@@ -32,17 +32,28 @@ export function searchMedia(projectId: string, query: MediaSearchQuery): Promise
   );
 }
 
+/** A picked candidate as a project asset; `startMs` is where the scene starts in it (a shot of a clip). */
+export interface PickedMedia {
+  asset: MediaAsset;
+  startMs?: number;
+}
+
+const PickedMediaSchema = z.object({
+  asset: MediaAssetSchema,
+  startMs: z.number().int().nonnegative().optional(),
+});
+
 export async function importCandidate(
   projectId: string,
   candidate: PickedCandidate,
   query: string,
-): Promise<MediaAsset> {
-  const { asset } = await request(
+): Promise<PickedMedia> {
+  const { asset, startMs } = await request(
     `/api/projects/${encodeURIComponent(projectId)}/media-search/import`,
     { method: "POST", body: JSON.stringify({ candidate, query }) },
-    z.object({ asset: MediaAssetSchema }),
+    PickedMediaSchema,
   );
-  return asset;
+  return startMs === undefined ? { asset } : { asset, startMs };
 }
 
 export function listLibraryMedia(): Promise<LibraryMedia[]> {
