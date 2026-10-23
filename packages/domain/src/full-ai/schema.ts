@@ -61,6 +61,23 @@ export type FullAiJobInfo = z.infer<typeof FullAiJobInfoSchema>;
 
 export const FULL_AI_MAX_WARNINGS = 50;
 
+/**
+ * Why a scene was left without media: no candidate was found, the AI rejected every one, or a usable one
+ * could not be added (a download or copy failed).
+ */
+export const MissingSceneReasonSchema = z.enum(["no_candidates", "all_rejected", "not_assigned"]);
+export type MissingSceneReason = z.infer<typeof MissingSceneReasonSchema>;
+
+/** A scene the user still has to find media for, with what to look for (ADR 0019). */
+export const MissingSceneSchema = z.object({
+  sceneId: z.string().min(1),
+  reason: MissingSceneReasonSchema,
+  /** What the picture should show, from the scene's visual plan; empty when it has none. */
+  intent: z.string(),
+  queries: z.object({ en: z.array(z.string()), vi: z.array(z.string()), zh: z.array(z.string()) }),
+});
+export type MissingScene = z.infer<typeof MissingSceneSchema>;
+
 /** Stored as `full-ai/<jobId>.json`: the ranked candidates per scene, for "Đổi media" on the review screen. */
 export const FullAiResultSchema = z.object({
   scenes: z.array(
@@ -72,5 +89,7 @@ export const FullAiResultSchema = z.object({
   ),
   /** Things that did not work but did not stop the run (a provider down, a voice that failed…). */
   warnings: z.array(z.string().max(500)).max(FULL_AI_MAX_WARNINGS),
+  /** Optional so results saved before ADR 0019 stay valid. */
+  missingScenes: z.array(MissingSceneSchema).optional(),
 });
 export type FullAiResult = z.infer<typeof FullAiResultSchema>;

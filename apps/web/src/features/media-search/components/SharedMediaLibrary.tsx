@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/sha
 import { Input } from "@/shared/ui/input";
 
 import { listLibraryMedia, removeLibraryMedia, setLibraryMediaTags } from "../api";
-import { formatDuration, libraryFileUrl, parseTags, SOURCE_LABELS } from "../model";
+import { formatDuration, LIBRARY_SOURCE_LABELS, libraryFileUrl, parseTags } from "../model";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : "Đã có lỗi xảy ra.");
 
@@ -100,7 +100,7 @@ export function SharedMediaLibrary() {
                   className="aspect-video w-full rounded object-cover"
                 />
                 <span className="text-xs text-muted-foreground">
-                  {SOURCE_LABELS[item.source]} · {item.kind === "video" ? "Video" : "Ảnh"}
+                  {LIBRARY_SOURCE_LABELS[item.source]} · {item.kind === "video" ? "Video" : "Ảnh"}
                   {item.durationMs !== undefined ? ` · ${formatDuration(item.durationMs)}` : ""} · dùng{" "}
                   {item.usageCount} lần
                 </span>

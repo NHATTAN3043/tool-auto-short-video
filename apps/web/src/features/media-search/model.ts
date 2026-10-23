@@ -1,6 +1,7 @@
 import {
   narrationKeywords,
   type ContentLanguage,
+  type LibrarySource,
   type MediaLink,
   type MediaSourceFilter,
   type SearchLanguage,
@@ -20,6 +21,13 @@ export const SOURCE_LABELS: Record<MediaSourceFilter, string> = {
   library: "Thư viện chung",
   pexels: "Pexels",
   pixabay: "Pixabay",
+};
+
+/** Where an item of the shared library came from. */
+export const LIBRARY_SOURCE_LABELS: Record<LibrarySource, string> = {
+  pexels: "Pexels",
+  pixabay: "Pixabay",
+  upload: "Tự tải",
 };
 
 /** Every source, own files first: what "Tất cả nguồn" searches. */

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { ClipShot } from "./clip-analysis";
 import { normalizeTags, type LibraryMedia } from "./media-library";
 import type { MediaAsset } from "./schema";
 
@@ -37,6 +38,14 @@ export const MediaLinkSchema = z.discriminatedUnion("type", [
 ]);
 export type MediaLink = z.infer<typeof MediaLinkSchema>;
 
+/** One shot of an analyzed clip (ADR 0019): choosing it starts the scene at `startMs`. */
+export const MediaSegmentSchema = z.object({
+  index: z.number().int().nonnegative(),
+  startMs: z.number().int().nonnegative(),
+  endMs: z.number().int().positive(),
+});
+export type MediaSegment = z.infer<typeof MediaSegmentSchema>;
+
 export const MediaCandidateSchema = z.object({
   provider: MediaSourceFilterSchema,
   /** Project asset id, library item id, or the provider's own id of the stock file. */
@@ -52,12 +61,20 @@ export const MediaCandidateSchema = z.object({
   libraryId: z.string().min(1).optional(),
   /** What the provider says the file shows (alt text, tags, library tags); used to rank by text. */
   description: z.string().max(500).optional(),
+  /** Set when the candidate is one shot of a clip rather than the whole file. */
+  segment: MediaSegmentSchema.optional(),
 });
 export type MediaCandidate = z.infer<typeof MediaCandidateSchema>;
 
-/** Identifies a candidate across sources: `library:video:lib_1`, `pexels:image:123`. */
-export function candidateKey(candidate: Pick<MediaCandidate, "provider" | "kind" | "ref">): string {
-  return `${candidate.provider}:${candidate.kind}:${candidate.ref}`;
+/**
+ * Identifies a candidate across sources: `library:video:lib_1`, `pexels:image:123`; one shot of a clip adds
+ * its number, `library:video:lib_1#3`.
+ */
+export function candidateKey(
+  candidate: Pick<MediaCandidate, "provider" | "kind" | "ref"> & { segment?: Pick<MediaSegment, "index"> },
+): string {
+  const key = `${candidate.provider}:${candidate.kind}:${candidate.ref}`;
+  return candidate.segment ? `${key}#${String(candidate.segment.index)}` : key;
 }
 
 /**
@@ -72,6 +89,8 @@ export const PickedCandidateSchema = z.object({
   provider: MediaSourceFilterSchema,
   ref: z.string().min(1),
   kind: z.enum(["video", "image"]),
+  /** The shot of an analyzed clip; the server reads its times from the library, never from the request. */
+  segmentIndex: z.number().int().nonnegative().optional(),
 });
 export type PickedCandidate = z.infer<typeof PickedCandidateSchema>;
 
@@ -156,6 +175,55 @@ export function scoreTags(rawTags: readonly string[], query: string): number {
 
 export function scoreLibraryItem(item: Pick<LibraryMedia, "tags" | "kind">, query: string): number {
   return scoreTags(item.tags, query);
+}
+
+/** A description's words count half as much as a tag's: tags are the words chosen for searching. */
+const DESCRIPTION_WORD_SCORE = 5;
+
+/** How well one shot of an analyzed clip matches a query: its tags, plus the words of its description. */
+export function scoreShot(shot: Pick<ClipShot, "tags" | "description">, query: string): number {
+  const described = new Set(words(shot.description));
+  const shared = [...new Set(words(query))].filter((word) => described.has(word)).length;
+  return scoreTags(shot.tags, query) + DESCRIPTION_WORD_SCORE * shared;
+}
+
+/**
+ * A library match: the whole item, or one shot of an analyzed video. An analyzed video is matched by its
+ * shots only, since the shots say what is in it far better than the tags of its file name.
+ */
+export interface LibraryMatch {
+  item: LibraryMedia;
+  shot?: ClipShot;
+  score: number;
+}
+
+function libraryMatches(item: LibraryMedia, query: string): LibraryMatch[] {
+  if (item.analysis) {
+    return item.analysis.shots.map((shot) => ({ item, shot, score: scoreShot(shot, query) }));
+  }
+  return [{ item, score: scoreLibraryItem(item, query) }];
+}
+
+/**
+ * Best library matches of the right kind, shots included: by score, then clean shots before shots with
+ * burnt-in text, portrait items, and more-used items.
+ */
+export function searchLibraryMatches(
+  items: readonly LibraryMedia[],
+  query: string,
+  kind: "video" | "image",
+): LibraryMatch[] {
+  return items
+    .filter((item) => item.kind === kind)
+    .flatMap((item) => libraryMatches(item, query))
+    .filter(({ score }) => score >= MIN_MATCH_SCORE)
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        Number(a.shot?.textOverlay === true) - Number(b.shot?.textOverlay === true) ||
+        Number(portraitItem(b.item)) - Number(portraitItem(a.item)) ||
+        b.item.usageCount - a.item.usageCount,
+    );
 }
 
 /**

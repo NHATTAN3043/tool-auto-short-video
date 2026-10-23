@@ -10,6 +10,7 @@ export * from "./ai/schema";
 export * from "./cost/schema";
 export * from "./full-ai/schema";
 export * from "./full-ai/draft";
+export { missingScenes, type SceneMediaOutcome } from "./full-ai/missing-scenes";
 export * from "./skill/schema";
 
 export {
@@ -21,6 +22,7 @@ export {
 export { parseByteRange, type ByteRange } from "./media/byte-range";
 export { addAsset, findMissingAssetIds } from "./media/operations";
 export * from "./media/sfx-library";
+export * from "./media/clip-analysis";
 export * from "./media/media-library";
 export * from "./media/search";
 export { NARRATION_KEYWORDS_MAX, narrationKeywords } from "./media/narration-keywords";

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeTags, stockSourceRef, type LibraryMedia } from "./media-library";
+import type { ClipShot } from "./clip-analysis";
+import { normalizeTags, stockSourceRef, uploadSourceRef, type LibraryMedia } from "./media-library";
 import type { MediaAsset } from "./schema";
 import {
+  candidateKey,
   capOwnCandidates,
   foldText,
   isOwnCandidate,
@@ -12,8 +14,10 @@ import {
   pickRendition,
   rankCandidates,
   scoreLibraryItem,
+  scoreShot,
   scoreTags,
   searchLibrary,
+  searchLibraryMatches,
   searchProjectAssets,
   tagsFromFileName,
   type MediaCandidate,
@@ -202,5 +206,81 @@ describe("MediaSearchQuerySchema", () => {
       sources: ["project", "library", "pexels", "pixabay"],
     });
     expect(MediaSearchQuerySchema.safeParse({ query: "", kind: "video" }).success).toBe(false);
+  });
+});
+
+const clipShot = (index: number, tags: string[], description: string, textOverlay = false): ClipShot => ({
+  index,
+  startMs: index * 3000,
+  endMs: (index + 1) * 3000,
+  description,
+  tags,
+  textOverlay,
+});
+
+const analyzed = (id: string, shots: ClipShot[], extra: Partial<LibraryMedia> = {}): LibraryMedia =>
+  item(id, ["7389101112"], {
+    source: "upload",
+    contentHash: `sha256:${id}`,
+    sourceRef: uploadSourceRef(`sha256:${id}`),
+    analysis: { shots, model: "claude-sonnet-5-5", analyzedAt: "2026-10-23T00:00:00.000Z" },
+    ...extra,
+  });
+
+describe("scoreShot / searchLibraryMatches", () => {
+  it("scores a shot by its tags plus half a point per word of its description", () => {
+    const sleeping = clipShot(0, ["orange cat"], "An orange cat sleeping on a sofa");
+    expect(scoreShot(sleeping, "orange cat")).toBe(100 + 10);
+    expect(scoreShot(sleeping, "cat sleeping")).toBe(scoreTags(["orange cat"], "cat sleeping") + 10);
+  });
+
+  it("ranks a whole-tag match first and drops a shot matching only by description", () => {
+    const clip = analyzed("lib_a", [
+      clipShot(0, ["dog"], "A cat and a dog sleeping together"),
+      clipShot(1, ["cat"], "A cat sleeping on a sofa"),
+      clipShot(2, ["cat sleeping"], "Close-up of a cat"),
+    ]);
+    // 2: whole tag 100 + "cat" 5; 1: tag inside the query 40 + "cat" 10 + description 10; 0: description 10 only.
+    const matches = searchLibraryMatches([clip], "cat sleeping", "video");
+    expect(matches.map((match) => [match.shot?.index, match.score])).toEqual([
+      [2, 105],
+      [1, 60],
+    ]);
+  });
+
+  it("matches an analyzed video by its shots only, not by the tags of its file name", () => {
+    const clip = analyzed("lib_a", [clipShot(0, ["beach"], "Waves on a beach")]);
+    expect(searchLibraryMatches([clip], "7389101112", "video")).toEqual([]);
+    expect(searchLibraryMatches([clip], "beach", "video")).toHaveLength(1);
+  });
+
+  it("offers shots with burnt-in text after clean shots of the same score", () => {
+    const clip = analyzed("lib_a", [
+      clipShot(0, ["street food"], "Street food stall", true),
+      clipShot(1, ["street food"], "Street food stall"),
+    ]);
+    expect(searchLibraryMatches([clip], "street food", "video").map((match) => match.shot?.index)).toEqual([
+      1, 0,
+    ]);
+  });
+
+  it("keeps the score threshold and mixes shots with unanalyzed items", () => {
+    const clip = analyzed("lib_a", [clipShot(0, ["cat"], "A cat"), clipShot(1, ["car"], "A red car")]);
+    const plain = item("lib_b", ["cat sleeping"]);
+    const matches = searchLibraryMatches([clip, plain], "cat sleeping", "video");
+    expect(matches.map((match) => [match.item.id, match.shot?.index])).toEqual([
+      ["lib_b", undefined],
+      ["lib_a", 0],
+    ]);
+    expect(matches.every((match) => match.score >= MIN_MATCH_SCORE)).toBe(true);
+  });
+});
+
+describe("candidateKey", () => {
+  it("tells two shots of one clip apart and keeps whole-file keys as before", () => {
+    const whole = candidate("library", "lib_1", 1080, 1920);
+    const third: MediaCandidate = { ...whole, segment: { index: 3, startMs: 9000, endMs: 12_000 } };
+    expect(candidateKey(whole)).toBe("library:video:lib_1");
+    expect(candidateKey(third)).toBe("library:video:lib_1#3");
   });
 });
