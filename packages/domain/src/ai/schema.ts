@@ -13,12 +13,14 @@ import { AiConfigSchema } from "./config";
 /** Any whole number of seconds the user types, above 0 and below 1000. */
 export const AI_SCRIPT_MIN_SECONDS = 1;
 export const AI_SCRIPT_MAX_SECONDS = 999;
+export const AI_IDEA_MAX_CHARACTERS = 6000;
+
 /** Per language. The AI is asked for at least AI_MIN_SEARCH_QUERIES of each. */
 export const AI_MAX_SEARCH_QUERIES = 6;
 export const AI_MIN_SEARCH_QUERIES = 3;
 
 export const ScriptRequestSchema = z.object({
-  idea: z.string().trim().min(3).max(2000),
+  idea: z.string().trim().min(3).max(AI_IDEA_MAX_CHARACTERS),
   targetDurationSec: z.number().int().min(AI_SCRIPT_MIN_SECONDS).max(AI_SCRIPT_MAX_SECONDS),
   /** Free text: "hài hước", "truyền cảm hứng"… */
   tone: z.string().trim().max(200).optional(),

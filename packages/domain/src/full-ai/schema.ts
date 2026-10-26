@@ -7,6 +7,7 @@ import {
   AI_SCRIPT_MIN_SECONDS,
   SourcePartSchema,
   SourceScriptSchema,
+  AI_IDEA_MAX_CHARACTERS,
 } from "../ai/schema";
 import { MediaCandidateSchema, MediaRankingModeSchema } from "../media/search";
 import { VisualPlanSchema } from "../scene/schema";
@@ -64,7 +65,7 @@ export type SourceVideo = z.infer<typeof SourceVideoSchema>;
 
 export const FullAiRequestSchema = z.object({
   /** Needed when the script step runs; otherwise the project's own script is used. */
-  idea: z.string().trim().max(2000).optional(),
+  idea: z.string().trim().max(AI_IDEA_MAX_CHARACTERS).optional(),
   targetDurationSec: z.number().int().min(AI_SCRIPT_MIN_SECONDS).max(AI_SCRIPT_MAX_SECONDS),
   tone: z.string().trim().max(200).optional(),
   rankingMode: MediaRankingModeSchema,

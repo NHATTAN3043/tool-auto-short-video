@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   AI_BRIEF_MAX_OPTIONS,
   AI_BRIEF_MAX_QUESTIONS,
+  AI_IDEA_MAX_CHARACTERS,
   AI_SCRIPT_MAX_SECONDS,
   AI_SCRIPT_MIN_SECONDS,
   BriefQuestionSchema,
@@ -62,7 +63,7 @@ export type DraftOutline = z.infer<typeof DraftOutlineSchema>;
 export const FullAiDraftSchema = z.object({
   schemaVersion: z.literal(FULL_AI_DRAFT_SCHEMA_VERSION),
   step: FullAiDraftStepSchema,
-  idea: z.string().max(2000),
+  idea: z.string().max(AI_IDEA_MAX_CHARACTERS),
   targetDurationSec: z.number().int().min(AI_SCRIPT_MIN_SECONDS).max(AI_SCRIPT_MAX_SECONDS),
   tone: z.string().max(200),
   skillId: SkillIdSchema.optional(),

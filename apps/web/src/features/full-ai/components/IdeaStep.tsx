@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AI_IDEA_MAX_CHARACTERS,
   CONTENT_LANGUAGE_LABELS,
   ContentLanguageSchema,
   SkillIdSchema,
@@ -359,7 +360,7 @@ export function IdeaStep({
           <Textarea
             id={ids.idea}
             rows={3}
-            maxLength={2000}
+            maxLength={AI_IDEA_MAX_CHARACTERS}
             disabled={disabled}
             className="bg-background"
             placeholder={
