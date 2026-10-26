@@ -28,6 +28,8 @@ function plan(): RenderPlan {
           volume: 0.3,
           startFrom: 0,
           segmentFrames: 90,
+          playbackRate: 1,
+          playedFrames: 90,
           loop: false,
         },
       },

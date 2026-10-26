@@ -21,6 +21,8 @@ import {
   splitScene,
   updateScene,
   updateSceneMedia,
+  fitMediaToVoice,
+  setMediaPlaybackRate,
   updateSceneSfx,
   updateStyle,
   type ContentLanguage,
@@ -56,7 +58,8 @@ export type EditorContent = Pick<
   "script" | "scenes" | "voiceAssetId" | "music" | "style" | "voice" | "voiceTrack"
 >;
 
-export type ProjectSettingsPatch = Pick<Project, "name" | "mode" | "automationSettings">;
+export type ProjectSettingsPatch = Pick<Project, "name" | "mode" | "automationSettings"> &
+  Pick<Partial<Project>, "ai">;
 
 export interface EditorState {
   project: Project;
@@ -83,6 +86,8 @@ export type EditorAction =
   | { type: "mergeNext"; sceneId: string }
   | { type: "assignMedia"; sceneId: string; assetId: string; sourceStartMs?: number }
   | { type: "updateMedia"; sceneId: string; patch: SceneMediaPatch }
+  | { type: "fitSpeed"; sceneId: string }
+  | { type: "setPlaybackRate"; sceneId: string; playbackRate: number }
   | { type: "clearMedia"; sceneId: string }
   | { type: "addSfx"; sceneId: string; assetId: string }
   | { type: "updateSfx"; sceneId: string; sfxId: string; patch: SceneSfxPatch }
@@ -170,6 +175,7 @@ function coalesceKeyOf(action: ContentAction): string | null {
   if (action.type === "setVisualPlan") return `visual:${action.sceneId}`;
   // Dragging a slider fires many updates; they form one undo step until the drag ends.
   if (action.type === "updateMedia") return `media:${action.sceneId}`;
+  if (action.type === "setPlaybackRate") return `speed:${action.sceneId}`;
   if (action.type === "updateSfx") return `sfx:${action.sfxId}`;
   if (action.type === "setMusic" && action.music !== null) return "music";
   if (action.type === "updateStyle") return "style";
@@ -192,6 +198,10 @@ function failureMessage(action: ContentAction): string {
       return "Không gán được media này cho cảnh.";
     case "updateMedia":
       return "Đoạn video không hợp lệ: điểm kết thúc phải sau điểm bắt đầu.";
+    case "fitSpeed":
+      return "Cần đoạn video và giọng đọc có thời lượng xác định để khớp tốc độ media.";
+    case "setPlaybackRate":
+      return "Không đổi được tốc độ media: cần video và tốc độ từ 0,5× đến 2×.";
     case "setVoice":
     case "setSceneVoice":
     case "setMusic":
@@ -255,6 +265,10 @@ function applyContent(project: Project, action: ContentAction, ctx: DomainContex
       });
     case "updateMedia":
       return updateSceneMedia(project, action.sceneId, action.patch);
+    case "fitSpeed":
+      return fitMediaToVoice(project, action.sceneId);
+    case "setPlaybackRate":
+      return setMediaPlaybackRate(project, action.sceneId, action.playbackRate);
     case "clearMedia":
       return clearMedia(project, action.sceneId);
     case "addSfx":

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { DomainError } from "@studio/domain";
+
 import {
   budgetDefaults,
   findRepoRoot,
@@ -11,6 +13,7 @@ import {
 import { BudgetCostGuard, GuardedTts } from "@studio/adapters/cost-guard";
 import { FfmpegMediaProbe } from "@studio/adapters/ffmpeg";
 import { ClaudeAi } from "@studio/adapters/ai-claude";
+import { OpenAi } from "@studio/adapters/ai-openai";
 import { ElevenLabsTts } from "@studio/adapters/tts-elevenlabs";
 import { PexelsSearch } from "@studio/adapters/media-pexels";
 import { PixabaySearch } from "@studio/adapters/media-pixabay";
@@ -90,6 +93,7 @@ import {
   type ProjectRepository,
   type SfxLibraryRepository,
   type AiPort,
+  type AiResolver,
   type MediaLibraryRepository,
   type MediaSearchPort,
   type RemoteFilePort,
@@ -120,8 +124,25 @@ function createStockProviders(env: Env): MediaSearchPort[] {
 }
 
 function createAi(env: Env): AiPort | null {
-  if (env.ANTHROPIC_API_KEY === undefined) return null;
-  return new ClaudeAi({ apiKey: env.ANTHROPIC_API_KEY, model: env.AI_MODEL });
+  if (env.ANTHROPIC_API_KEY !== undefined)
+    return new ClaudeAi({ apiKey: env.ANTHROPIC_API_KEY, model: env.AI_MODEL });
+  if (env.OPENAI_API_KEY !== undefined)
+    return new OpenAi({ apiKey: env.OPENAI_API_KEY, model: env.OPENAI_AI_MODEL });
+  return null;
+}
+
+function createAiResolver(env: Env): AiResolver {
+  return (config) => {
+    const provider = config?.provider ?? "claude";
+    const model = config?.model ?? env.AI_MODEL;
+    if (provider === "claude" && env.ANTHROPIC_API_KEY !== undefined) {
+      return new ClaudeAi({ apiKey: env.ANTHROPIC_API_KEY, model });
+    }
+    if (provider === "openai" && env.OPENAI_API_KEY !== undefined) {
+      return new OpenAi({ apiKey: env.OPENAI_API_KEY, model });
+    }
+    throw new DomainError("AI_UNAVAILABLE", `Missing API key for ${provider}`);
+  };
 }
 
 function createTts(env: Env): TtsPort | null {
@@ -190,10 +211,11 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}) {
   // Without a key every voice service is null and the UI hides voice generation (Manual needs no key).
   const tts = overrides.tts === undefined ? createTts(env) : overrides.tts;
   const ai = overrides.ai === undefined ? createAi(env) : overrides.ai;
+  const resolveAi = overrides.ai === undefined ? createAiResolver(env) : undefined;
   // Without keys the list is empty: only the shared library is searched.
   const providers = overrides.stockProviders ?? createStockProviders(env);
   const remote = overrides.remote ?? new FetchRemoteFiles();
-  const aiDeps = ai ? { repo, ai, queue, clock, costGuard, skills } : null;
+  const aiDeps = ai ? { repo, ai, ...(resolveAi && { resolveAi }), queue, clock, costGuard, skills } : null;
   const voiceDefaults = tts
     ? {
         provider: tts.id,
@@ -201,7 +223,20 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}) {
         ...(env.ELEVENLABS_DEFAULT_VOICE_ID !== undefined && { voiceId: env.ELEVENLABS_DEFAULT_VOICE_ID }),
       }
     : null;
-  const fullAiDeps = ai ? { repo, ai, tts, voiceDefaults, costGuard, queue, clock, skills } : null;
+  const fullAiDeps = ai
+    ? {
+        repo,
+        ai,
+        ...(resolveAi && { resolveAi }),
+        tts,
+        voiceDefaults,
+        costGuard,
+        queue,
+        clock,
+        skills,
+        library: mediaLibrary,
+      }
+    : null;
   return {
     /** Releases the database connections of a container that is replaced. */
     close,
@@ -222,10 +257,24 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}) {
     requestAiTask: aiDeps ? makeRequestAiTask(aiDeps) : null,
     /** Clip analysis (ADR 0019); null without an AI key, so the UI hides it. */
     estimateClipAnalysis: ai
-      ? makeEstimateClipAnalysis({ repo, library: mediaLibrary, ai, costGuard })
+      ? makeEstimateClipAnalysis({
+          repo,
+          library: mediaLibrary,
+          ai,
+          ...(resolveAi && { resolveAi }),
+          costGuard,
+        })
       : null,
     requestClipAnalysis: ai
-      ? makeRequestClipAnalysis({ repo, library: mediaLibrary, ai, costGuard, queue, clock })
+      ? makeRequestClipAnalysis({
+          repo,
+          library: mediaLibrary,
+          ai,
+          ...(resolveAi && { resolveAi }),
+          costGuard,
+          queue,
+          clock,
+        })
       : null,
     getAiResult: ai ? makeGetAiResult({ queue, storage }) : null,
     // Full AI runs in the worker too (ADR 0010); the server estimates, queues and reads the result.

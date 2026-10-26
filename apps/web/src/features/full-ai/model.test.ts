@@ -26,6 +26,7 @@ import {
   isRunning,
   outlineSceneLabel,
   outlineTask,
+  parseDuration,
   progressLine,
   quickRequest,
   rememberedSkill,
@@ -270,5 +271,15 @@ describe("review", () => {
     expect(stillMissing(null, project())).toEqual([]);
     expect(MISSING_REASON_LABELS.all_rejected).toBe("AI thấy không media nào hợp");
     expect(reviewSceneAnchor("s2")).toBe("review-scene-s2");
+  });
+});
+
+describe("parseDuration", () => {
+  it("takes whole seconds above 0 and below 1000", () => {
+    expect(parseDuration(" 75 ")).toEqual({ seconds: 75 });
+    expect(parseDuration("999")).toEqual({ seconds: 999 });
+    for (const text of ["0", "1000", "", "12.5", "-3", "abc"]) {
+      expect(parseDuration(text)).toHaveProperty("error");
+    }
   });
 });

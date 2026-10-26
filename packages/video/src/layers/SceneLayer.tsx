@@ -25,12 +25,13 @@ function MediaElement({
       style={style}
       trimBefore={media.startFrom}
       durationInFrames={media.segmentFrames}
+      playbackRate={media.playbackRate}
       volume={volume}
       muted={volume === 0}
     />
   );
   // A source segment shorter than the scene would otherwise freeze/black out at its end.
-  return media.loop ? <Loop durationInFrames={media.segmentFrames}>{video}</Loop> : video;
+  return media.loop ? <Loop durationInFrames={media.playedFrames}>{video}</Loop> : video;
 }
 
 function Visual({ media, durationInFrames }: { media: RenderPlanMedia; durationInFrames: number }) {

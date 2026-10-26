@@ -134,10 +134,15 @@ export function buildRenderPlan(project: Project, resolveUrl: ResolveUrl): Rende
     if (asset.kind === "image") {
       return { kind: "image", src, fit: media.fit, focusX: media.focusX, kenBurns: media.kenBurns };
     }
+    const playbackRate = media.playbackRate ?? 1;
     const startFrom = toFrame(media.sourceStartMs);
     const endMs = media.sourceEndMs ?? asset.durationMs;
     // Unknown source length: play straight through and trust the file to be long enough.
-    const segmentFrames = endMs === undefined ? sequenceFrames : Math.max(1, toFrame(endMs) - startFrom);
+    const segmentFrames =
+      endMs === undefined
+        ? Math.ceil(sequenceFrames * playbackRate)
+        : Math.max(1, toFrame(endMs) - startFrom);
+    const playedFrames = Math.max(1, Math.floor(segmentFrames / playbackRate));
     return {
       kind: "video",
       src,
@@ -146,7 +151,9 @@ export function buildRenderPlan(project: Project, resolveUrl: ResolveUrl): Rende
       volume: media.volume,
       startFrom,
       segmentFrames,
-      loop: segmentFrames < sequenceFrames,
+      playbackRate,
+      playedFrames,
+      loop: playedFrames < sequenceFrames,
     };
   }
 }

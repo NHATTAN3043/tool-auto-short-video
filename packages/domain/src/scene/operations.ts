@@ -210,6 +210,8 @@ export function assignMedia(project: Project, sceneId: string, input: SceneMedia
     if (sourceEndMs !== undefined) sourceEndMs = Math.min(sourceEndMs, asset.durationMs);
   }
 
+  // Only videos have a speed; normal speed is stored as no speed at all.
+  const playbackRate = isVideo && input.playbackRate !== 1 ? input.playbackRate : undefined;
   const parsed = SceneMediaSchema.safeParse({
     assetId: asset.id,
     sourceStartMs,
@@ -218,6 +220,7 @@ export function assignMedia(project: Project, sceneId: string, input: SceneMedia
     focusX: input.focusX ?? 0.5,
     volume: isVideo ? (input.volume ?? 0) : 0,
     kenBurns: input.kenBurns ?? !isVideo,
+    ...(playbackRate !== undefined && { playbackRate }),
   });
   if (!parsed.success) {
     throw new DomainError("INVALID_MEDIA", parsed.error.issues.map((issue) => issue.message).join("; "));

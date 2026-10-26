@@ -34,6 +34,17 @@ export function makeVideo(dir: string, name = "landscape.mp4"): string {
   return out;
 }
 
+/** 3 seconds of picture and 6 seconds of audio: reproduces downloaded clips with an audio-only tail. */
+export function makeVideoWithAudioTail(dir: string): string {
+  const out = path.join(dir, "audio-tail.mp4");
+  ffmpeg(
+    ...["-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30:duration=3"],
+    ...["-f", "lavfi", "-i", "sine=frequency=440:duration=6"],
+    ...["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", out],
+  );
+  return out;
+}
+
 /**
  * 720×1280 portrait, 30fps, 9s in three shots: red 0–2s, blue 2–5s, a moving test pattern 5–9s. Scene
  * changes at 2000 and 5000 ms.

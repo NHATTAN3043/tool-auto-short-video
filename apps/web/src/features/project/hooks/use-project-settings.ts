@@ -1,6 +1,6 @@
 "use client";
 
-import type { AutomationMode, AutomationSettings, Project } from "@studio/domain";
+import type { AiConfig, AutomationMode, AutomationSettings, Project } from "@studio/domain";
 import { useState } from "react";
 
 import {
@@ -63,6 +63,9 @@ export function useProjectSettings(
     },
     toggle: (key: keyof AutomationSettings, value: boolean) => {
       setDraft((d) => toggleSetting(d, key, value));
+    },
+    setAi: (ai: AiConfig) => {
+      setDraft((d) => ({ ...d, ai }));
     },
     save,
   };

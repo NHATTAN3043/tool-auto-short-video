@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { AiConfigSchema } from "../ai/config";
+
 // Clip analysis (ADR 0019): a video the user downloaded is cut into shots at its scene changes, and AI
 // describes each shot, so Full AI can pick the right moment of a long clip instead of its first seconds.
 
@@ -119,6 +121,8 @@ export const MAX_CLIPS_PER_JOB = 20;
 /** The `clip` job (ADR 0019): which library videos to analyze, and what it may cost. */
 export const ClipJobInfoSchema = z.object({
   libraryIds: z.array(z.string().min(1)).min(1).max(MAX_CLIPS_PER_JOB),
+  /** Optional so queued jobs written before multi-provider AI stay readable. */
+  config: AiConfigSchema.optional(),
   /** Analyze again videos that already have shots (a new paid call). */
   reanalyze: z.boolean().optional(),
   /** Worst case estimated before the run; every call is still checked by CostGuard. */

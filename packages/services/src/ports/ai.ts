@@ -16,8 +16,11 @@ import type {
   SkillGuidance,
   ScriptSuggestion,
   ShotDescriptions,
+  SourceCutRequest,
+  SourceCutSuggestion,
   VisualPlanRequest,
   VisualPlansSuggestion,
+  AiConfig,
 } from "@studio/domain";
 
 export interface AiEstimate {
@@ -95,6 +98,11 @@ export interface AiPort {
     input: ScriptOutlineRequest,
     guidance?: SkillGuidance,
   ): Promise<AiCall<ScriptOutlineSuggestion>>;
+  /**
+   * Full AI on a source video (ADR 0020): runs of its shots, in order, with their narration. Shot numbers in
+   * the answer are 0-based positions in `input.shots`; the domain checks them.
+   */
+  planSourceCut(input: SourceCutRequest, guidance?: SkillGuidance): Promise<AiCall<SourceCutSuggestion>>;
   /** Cost of describing one clip of `shotCount` stills; worked out from sizes, no call is made. */
   estimateShots(shotCount: number): AiEstimate;
   /**
@@ -103,3 +111,6 @@ export interface AiPort {
    */
   describeShots(input: DescribeShotsRequest, frames: readonly RankImage[]): Promise<AiCall<ShotDescriptions>>;
 }
+
+/** Resolves a configured adapter. Missing config means the legacy Claude default. */
+export type AiResolver = (config?: AiConfig) => AiPort;

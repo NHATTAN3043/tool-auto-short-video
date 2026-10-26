@@ -2,7 +2,7 @@ import type { MediaKind } from "@studio/domain";
 
 export interface ProbeResult {
   kind: MediaKind;
-  /** Missing for images. */
+  /** Missing for images. For video, the picture's duration when available, excluding audio-only tails. */
   durationMs?: number;
   /** Display size: already swapped for phone videos recorded with a 90/270° rotation flag. */
   width?: number;

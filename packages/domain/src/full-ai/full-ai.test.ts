@@ -71,7 +71,9 @@ describe("assertFullAiRequest", () => {
   });
 
   it("validates the request shape", () => {
-    expect(FullAiRequestSchema.safeParse({ ...request, targetDurationSec: 5 }).success).toBe(false);
+    expect(FullAiRequestSchema.safeParse({ ...request, targetDurationSec: 0 }).success).toBe(false);
+    expect(FullAiRequestSchema.safeParse({ ...request, targetDurationSec: 1000 }).success).toBe(false);
+    expect(FullAiRequestSchema.safeParse({ ...request, targetDurationSec: 999 }).success).toBe(true);
     expect(FullAiRequestSchema.safeParse({ ...request, rankingMode: "audio" }).success).toBe(false);
   });
 });

@@ -14,9 +14,34 @@ import {
   makeMp3,
   makeRotatedVideo,
   makeVideo,
+  makeVideoWithAudioTail,
 } from "./test-media";
 
 describe("interpretProbe", () => {
+  it("uses the picture duration when audio extends past the last video frame", () => {
+    expect(
+      interpretProbe({
+        streams: [
+          { codec_type: "video", codec_name: "h264", duration: "57.366667" },
+          { codec_type: "audio", duration: "62.037333" },
+        ],
+        format: { duration: "62.037333" },
+      }),
+    ).toMatchObject({ kind: "video", hasAudio: true, durationMs: 57_367 });
+  });
+
+  it.each([undefined, "N/A", "NaN", "-1", "0"])(
+    "falls back to the container when the video duration is %s",
+    (duration) => {
+      expect(
+        interpretProbe({
+          streams: [{ codec_type: "video", codec_name: "h264", duration }],
+          format: { duration: "62.037333" },
+        }),
+      ).toMatchObject({ kind: "video", durationMs: 62_037 });
+    },
+  );
+
   it("treats cover art in an mp3 as audio", () => {
     expect(
       interpretProbe({
@@ -90,6 +115,14 @@ describe.skipIf(!hasFfmpeg)("FfmpegMediaProbe (real ffmpeg)", () => {
 
   afterAll(() => {
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("reports the picture's 3 seconds rather than the 6 seconds of audio", async () => {
+    expect(await probe.probe(makeVideoWithAudioTail(dir))).toMatchObject({
+      kind: "video",
+      hasAudio: true,
+      durationMs: 3000,
+    });
   });
 
   it("probes a landscape video with audio", async () => {

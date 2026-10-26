@@ -232,6 +232,51 @@ describe("editor reducer: media", () => {
     expect(run(trimmed, { type: "clearMedia", sceneId: "a" }).project.scenes[0]?.media).toBeUndefined();
   });
 
+  it("fits a scene video to its voice and back to normal speed (ADR 0021)", () => {
+    const voiced = run(
+      withAssets(),
+      { type: "assignMedia", sceneId: "a", assetId: "vid" },
+      { type: "updateMedia", sceneId: "a", patch: { sourceEndMs: 11_000 } },
+      { type: "setSceneVoice", sceneId: "a", voiceAssetId: "voice" },
+    );
+    // 11 s of video for 9 s of voice plus the 0,3 s scene pause.
+    const fitted = run(voiced, { type: "fitSpeed", sceneId: "a" });
+    expect(fitted.project.scenes[0]).toMatchObject({ media: { playbackRate: 1.183 } });
+    expect(fitted.project.scenes[0]?.durationMs).toBe(voiced.project.scenes[0]?.durationMs);
+    const normal = run(fitted, { type: "updateMedia", sceneId: "a", patch: { playbackRate: 1 } });
+    expect(normal.project.scenes[0]?.media?.playbackRate).toBeUndefined();
+    expect(run(fitted, { type: "fitSpeed", sceneId: "b" }).lastError).toMatch(/video/u);
+  });
+
+  it("undoes a media speed drag as one change without changing scene duration", () => {
+    const start = run(
+      withAssets(),
+      { type: "assignMedia", sceneId: "a", assetId: "vid" },
+      { type: "updateMedia", sceneId: "a", patch: { sourceStartMs: 2000, sourceEndMs: 12_000 } },
+      { type: "commitTyping" },
+      { type: "setDuration", sceneId: "a", durationMs: 10_000 },
+    );
+    const dragged = run(
+      start,
+      { type: "setPlaybackRate", sceneId: "a", playbackRate: 1.1 },
+      { type: "setPlaybackRate", sceneId: "a", playbackRate: 1.5 },
+      { type: "setPlaybackRate", sceneId: "a", playbackRate: 2 },
+      { type: "commitTyping" },
+    );
+    expect(dragged.past).toHaveLength(start.past.length + 1);
+    expect(dragged.project.scenes[0]).toMatchObject({ durationMs: 10_000, media: { playbackRate: 2 } });
+    expect(run(dragged, { type: "undo" }).project.scenes).toEqual(start.project.scenes);
+    const reset = run(dragged, { type: "setPlaybackRate", sceneId: "a", playbackRate: 1 });
+    expect(reset.project.scenes[0]?.durationMs).toBe(10_000);
+    expect(reset.project.scenes[0]?.media?.playbackRate).toBeUndefined();
+    const invalid = run(dragged, { type: "setPlaybackRate", sceneId: "a", playbackRate: 3 });
+    expect(invalid.project).toBe(dragged.project);
+    expect(invalid.lastError).toContain("tốc độ");
+    const longer = run(dragged, { type: "setDuration", sceneId: "a", durationMs: 15_000 });
+    expect(longer.project.scenes[0]).toMatchObject({ durationMs: 15_000, media: { playbackRate: 2 } });
+    expect(run(longer, { type: "fitSpeed", sceneId: "a" }).project).toBe(longer.project);
+  });
+
   it("starts a picked shot of a clip where the shot starts (ADR 0019)", () => {
     const assigned = run(withAssets(), {
       type: "assignMedia",

@@ -110,7 +110,11 @@ describe("AI tasks", () => {
   it("queues a job that records the worst case, and returns the same job for the same task", async () => {
     const s = await setup();
     const job = await s.request({ projectId: "prj_1", task: scriptTask });
-    expect(job).toMatchObject({ kind: "ai", status: "QUEUED", ai: { task: scriptTask, maxUsd: 0.042 } });
+    expect(job).toMatchObject({
+      kind: "ai",
+      status: "QUEUED",
+      ai: { task: scriptTask, config: { provider: "claude", model: "fake-model" }, maxUsd: 0.042 },
+    });
     expect((await s.request({ projectId: "prj_1", task: scriptTask })).id).toBe(job.id);
     expect((await s.request({ projectId: "prj_1", task: scenesTask })).id).not.toBe(job.id);
   });

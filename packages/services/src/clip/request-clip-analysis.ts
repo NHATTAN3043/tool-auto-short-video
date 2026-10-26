@@ -11,7 +11,7 @@ import {
   type RenderJob,
 } from "@studio/domain";
 
-import type { AiPort } from "../ports/ai";
+import type { AiPort, AiResolver } from "../ports/ai";
 import type { Clock } from "../ports/clock";
 import type { CostGuardPort } from "../ports/cost-guard";
 import type { JobQueuePort } from "../ports/job-queue";
@@ -45,6 +45,7 @@ export interface ClipAnalysisDeps {
   repo: ProjectRepository;
   library: MediaLibraryRepository;
   ai: AiPort;
+  resolveAi?: AiResolver;
   costGuard: CostGuardPort;
 }
 
@@ -62,7 +63,8 @@ function skipReason(item: LibraryMedia | null, reanalyze: boolean): ClipSkipReas
  */
 export function makeEstimateClipAnalysis(deps: ClipAnalysisDeps) {
   return async (input: ClipAnalysisInput): Promise<ClipAnalysisEstimate> => {
-    await deps.repo.get(input.projectId);
+    const project = await deps.repo.get(input.projectId);
+    const ai = deps.resolveAi?.(project.ai) ?? deps.ai;
     const ids = [...new Set(input.libraryIds)];
     if (ids.length > MAX_CLIPS_PER_JOB) {
       throw new DomainError("INVALID_INPUT", `Mỗi lần phân tích tối đa ${String(MAX_CLIPS_PER_JOB)} video`);
@@ -80,14 +82,14 @@ export function makeEstimateClipAnalysis(deps: ClipAnalysisDeps) {
         continue;
       }
       const expectedShots = expectedShotCount(item.durationMs);
-      const worst = deps.ai.estimateShots(maxShotCount(item.durationMs)).maxUsd;
+      const worst = ai.estimateShots(maxShotCount(item.durationMs)).maxUsd;
       clips.push({ id, fileName: item.fileName, durationMs: item.durationMs, expectedShots });
-      expectedUsd += deps.ai.estimateShots(expectedShots).expectedUsd;
+      expectedUsd += ai.estimateShots(expectedShots).expectedUsd;
       maxUsd += worst;
       maxCallUsd = Math.max(maxCallUsd, worst);
     }
     const budget = await deps.costGuard.check({ projectId: input.projectId, totalUsd: maxUsd, maxCallUsd });
-    return { clips, skipped, expectedUsd, maxUsd, model: deps.ai.model, budget };
+    return { clips, skipped, expectedUsd, maxUsd, model: ai.model, budget };
   };
 }
 
@@ -104,6 +106,12 @@ export function makeRequestClipAnalysis(
   return (input: ClipAnalysisInput): Promise<RenderJob> =>
     lock.run(input.projectId, async () => {
       const cost = await estimate(input);
+      const project = await deps.repo.get(input.projectId);
+      const selectedAi = deps.resolveAi?.(project.ai) ?? deps.ai;
+      const config = project.ai ?? {
+        provider: selectedAi.id === "openai" ? ("openai" as const) : ("claude" as const),
+        model: selectedAi.model,
+      };
       const libraryIds = cost.clips.map((clip) => clip.id);
       if (libraryIds.length === 0) {
         throw new DomainError("INVALID_OPERATION", "Không có video nào cần phân tích");
@@ -122,7 +130,12 @@ export function makeRequestClipAnalysis(
         id: (deps.newId ?? newId)("job"),
         projectId: input.projectId,
         kind: "clip",
-        clip: { libraryIds, ...(input.reanalyze === true && { reanalyze: true }), maxUsd: cost.maxUsd },
+        clip: {
+          libraryIds,
+          config,
+          ...(input.reanalyze === true && { reanalyze: true }),
+          maxUsd: cost.maxUsd,
+        },
         status: "QUEUED",
         progress: 0,
         createdAt: deps.clock.now(),

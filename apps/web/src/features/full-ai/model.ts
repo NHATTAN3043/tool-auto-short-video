@@ -1,4 +1,6 @@
 import {
+  AI_SCRIPT_MAX_SECONDS,
+  AI_SCRIPT_MIN_SECONDS,
   briefAnswers,
   FULL_AI_STEP_LABELS,
   formatUsd,
@@ -14,6 +16,7 @@ import {
   type FullAiRequest,
   type FullAiResult,
   type FullAiStep,
+  type MediaAsset,
   type MediaCandidate,
   type MediaRankingMode,
   type MissingScene,
@@ -24,6 +27,7 @@ import {
   type ContentLanguage,
   type SkillId,
   type SkillSummary,
+  type SourcePart,
 } from "@studio/domain";
 
 import type { FullAiEstimate } from "./api";
@@ -48,10 +52,11 @@ export function rememberedSkill(project: Project, skills: readonly SkillSummary[
   return id !== undefined && skills.some((skill) => skill.id === id) ? id : undefined;
 }
 
-/** Whether a run makes an AI call the skill is sent with: script, AI scene planning or keywords. */
+/** Whether a run makes an AI call the skill is sent with: script, AI scene planning, keywords or the cut. */
 export function runUsesSkill(steps: readonly FullAiStep[], settings: AutomationSettings): boolean {
   return (
     steps.includes("script") ||
+    steps.includes("cut") ||
     steps.includes("visual") ||
     (steps.includes("scenes") && settings.scenePlanning)
   );
@@ -91,8 +96,91 @@ export function withInstalledSkill(draft: FullAiDraft, skills: readonly SkillSum
   return next;
 }
 
+/** Whole seconds of a source video, within the target limits: offered as "Theo video gốc". */
+export function sourceSeconds(video: Pick<MediaAsset, "durationMs">): number {
+  return Math.min(AI_SCRIPT_MAX_SECONDS, Math.floor((video.durationMs ?? 0) / 1000));
+}
+
+/** Project videos a run can follow: uploaded with a length and a hash. */
+export function sourceVideos(project: Project): MediaAsset[] {
+  return project.assets.filter(
+    (asset) =>
+      asset.kind === "video" &&
+      asset.contentHash !== undefined &&
+      sourceSeconds(asset) >= AI_SCRIPT_MIN_SECONDS,
+  );
+}
+
+/** Videos and images that can open or close a source run: every one but the source itself. */
+export function sourceClips(project: Project, sourceAssetId: string): MediaAsset[] {
+  return project.assets.filter(
+    (asset) =>
+      asset.id !== sourceAssetId &&
+      (asset.kind === "image" || (asset.kind === "video" && asset.durationMs !== undefined)),
+  );
+}
+
+/**
+ * Target lengths offered on a source video: the usual ones and the video's own length. The target is the
+ * whole short, so it may be longer than the video when there is a hook or an ending.
+ */
+export function sourceDurations(videoSeconds: number): number[] {
+  return [...new Set([...FULL_AI_DURATIONS, videoSeconds])].sort((a, b) => a - b);
+}
+
+/** A length typed in "Tự nhập…": whole seconds above 0 and below 1000. */
+export function parseDuration(text: string): { seconds: number } | { error: string } {
+  const trimmed = text.trim();
+  const seconds = /^\d+$/u.test(trimmed) ? Number(trimmed) : Number.NaN;
+  return seconds >= AI_SCRIPT_MIN_SECONDS && seconds <= AI_SCRIPT_MAX_SECONDS
+    ? { seconds }
+    : { error: "Nhập số giây nguyên, lớn hơn 0 và nhỏ hơn 1000." };
+}
+
+/** The draft following `video`; the hook, the ending and the script chosen so far are kept. */
+export function withSourceVideo(draft: FullAiDraft, video: MediaAsset): FullAiDraft {
+  return { ...draft, sourceVideo: { volume: 0.2, ...draft.sourceVideo, assetId: video.id } };
+}
+
+/** The hook or ending as the request takes it; "none" is the same as leaving it out. */
+const sourcePart = (part: SourcePart | undefined) =>
+  part === undefined || part.kind === "none" ? undefined : part;
+
+/** The draft's source video as the request takes it; the script only when something was typed. */
+function sourceRequest(draft: FullAiDraft): FullAiRequest["sourceVideo"] {
+  const source = draft.sourceVideo;
+  if (!source) return undefined;
+  const text = source.script?.trim() ?? "";
+  const hook = sourcePart(source.hook);
+  const outro = sourcePart(source.outro);
+  return {
+    assetId: source.assetId,
+    volume: source.volume,
+    ...(text !== "" && { script: { text, role: source.scriptRole ?? "reference" } }),
+    ...(hook && { hook }),
+    ...(outro && { outro }),
+  };
+}
+
 /** Why the first step cannot go on yet, or null. Mirrors assertFullAiRequest so the button explains itself. */
 export function ideaError(draft: FullAiDraft, project: Project): string | null {
+  const source = draft.sourceVideo;
+  if (source) {
+    const video = sourceVideos(project).find((candidate) => candidate.id === source.assetId);
+    if (!video) return "Chọn video nguồn.";
+    const clips = sourceClips(project, video.id);
+    for (const [part, name] of [
+      [source.hook, "mở đầu"],
+      [source.outro, "kết"],
+    ] as const) {
+      if (part?.kind === "asset" && !clips.some((clip) => clip.id === part.assetId)) {
+        return `Clip ${name} không còn trong dự án, hãy chọn lại.`;
+      }
+    }
+    return draft.idea.trim().length < 3 && (source.script?.trim() ?? "") === ""
+      ? "Nhập yêu cầu (ít nhất 3 ký tự) hoặc dán kịch bản / sub của video."
+      : null;
+  }
   if (canAskFirst(project)) {
     return draft.idea.trim().length < 3 ? "Nhập ý tưởng (ít nhất 3 ký tự)." : null;
   }
@@ -162,20 +250,25 @@ export function quickRequest(
   const idea = draft.idea.trim();
   const tone = draft.tone.trim();
   const skillId = runUsesSkill(steps, project.automationSettings) ? draft.skillId : undefined;
+  const sourceVideo = sourceRequest(draft);
   return {
     ...(idea !== "" && { idea }),
     targetDurationSec: draft.targetDurationSec,
     ...(tone !== "" && { tone }),
     rankingMode: draft.rankingMode,
+    ...(sourceVideo !== undefined && { sourceVideo }),
     ...(skillId !== undefined && { skillId }),
     language,
     replaceScenes: false,
   };
 }
 
-/** "Duyệt và tạo video": the approved outline; null while it has no narration. */
+/**
+ * "Duyệt và tạo video": the approved outline; null while it has no narration, and on a source video,
+ * which is cut by the run itself instead of an outline (ADR 0020).
+ */
 export function approveRequest(draft: FullAiDraft, language: ContentLanguage): FullAiRequest | null {
-  const outline = draft.outline ? toFullAiOutline(draft.outline) : null;
+  const outline = draft.outline && !draft.sourceVideo ? toFullAiOutline(draft.outline) : null;
   if (!outline) return null;
   const idea = draft.idea.trim();
   const tone = draft.tone.trim();

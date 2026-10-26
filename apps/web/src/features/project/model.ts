@@ -3,6 +3,7 @@ import {
   PROJECT_NAME_MAX_LENGTH,
   type AutomationMode,
   type AutomationSettings,
+  type AiConfig,
   type CreateProjectInput,
   type Project,
 } from "@studio/domain";
@@ -13,6 +14,7 @@ export interface ProjectSettingsDraft {
   name: string;
   mode: AutomationMode;
   automationSettings: AutomationSettings;
+  ai?: AiConfig;
 }
 
 /** Display order of the toggles, following the pipeline: script → scenes → voice → media. */
@@ -42,7 +44,12 @@ export function newDraft(mode: AutomationMode = "manual"): ProjectSettingsDraft 
 }
 
 export function draftFromProject(project: Project): ProjectSettingsDraft {
-  return { name: project.name, mode: project.mode, automationSettings: { ...project.automationSettings } };
+  return {
+    name: project.name,
+    mode: project.mode,
+    automationSettings: { ...project.automationSettings },
+    ...(project.ai && { ai: { ...project.ai } }),
+  };
 }
 
 /** Choosing a mode resets the toggles to its preset; the user can still adjust them afterwards. */
@@ -91,6 +98,8 @@ export function isDirty(draft: ProjectSettingsDraft, project: Project): boolean 
   return (
     draft.name.trim() !== project.name ||
     draft.mode !== project.mode ||
-    SETTING_KEYS.some((key) => draft.automationSettings[key] !== project.automationSettings[key])
+    SETTING_KEYS.some((key) => draft.automationSettings[key] !== project.automationSettings[key]) ||
+    draft.ai?.provider !== project.ai?.provider ||
+    draft.ai?.model !== project.ai?.model
   );
 }

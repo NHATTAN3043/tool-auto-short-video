@@ -23,13 +23,19 @@ export function makeRequestFullAi(
       if (running) return running;
 
       const cost = await estimate(input);
+      const project = await deps.repo.get(input.projectId);
+      const selectedAi = deps.resolveAi?.(project.ai) ?? deps.ai;
+      const config = project.ai ?? {
+        provider: selectedAi.id === "openai" ? ("openai" as const) : ("claude" as const),
+        model: selectedAi.model,
+      };
       const blocked = budgetExceededMessage(cost.budget);
       if (blocked !== null) throw new DomainError("BUDGET_EXCEEDED", blocked);
       return deps.queue.enqueue({
         id: (deps.newId ?? newId)("job"),
         projectId: input.projectId,
         kind: "full_ai",
-        fullAi: { request: input.request, steps: cost.steps, maxUsd: cost.maxUsd },
+        fullAi: { request: input.request, steps: cost.steps, config, maxUsd: cost.maxUsd },
         status: "QUEUED",
         progress: 0,
         createdAt: deps.clock.now(),

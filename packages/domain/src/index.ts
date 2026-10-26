@@ -7,6 +7,7 @@ export * from "./project/schema";
 export * from "./render/schema";
 export * from "./voice/schema";
 export * from "./ai/schema";
+export * from "./ai/config";
 export * from "./cost/schema";
 export * from "./full-ai/schema";
 export * from "./full-ai/draft";
@@ -152,6 +153,25 @@ export {
   setAiSkill,
   setMediaRankingMode,
 } from "./full-ai/plan";
+export {
+  applySourceCut,
+  fitSourceScenes,
+  normalizeSourceCut,
+  sourceCutShots,
+  type SourceCut,
+  type SourceCutPart,
+  type SourceCutRole,
+} from "./full-ai/source-cut";
+export {
+  FIT_SPEED_MAX,
+  FIT_SPEED_MIN,
+  fitSceneToVoice,
+  fitSourceSpeed,
+  sceneSpanMs,
+  setMediaPlaybackRate,
+  fitMediaToVoice,
+  type SpeedFit,
+} from "./scene/fit-speed";
 
 export { buildRenderPlan, type ResolveUrl } from "./render-plan/build-render-plan";
 export type * from "./render-plan/types";

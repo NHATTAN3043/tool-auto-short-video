@@ -18,6 +18,7 @@ export const AI_TASK_LABELS: Record<AiTaskType, string> = {
   rewrite_scene: "Viết lại cảnh",
   brief_questions: "Hỏi lại ý tưởng",
   script_outline: "Viết khung kịch bản",
+  source_cut: "Dựng theo video nguồn",
 };
 
 export { formatUsd };

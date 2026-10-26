@@ -6,18 +6,24 @@ import {
   DEFAULT_MAX_WORDS_PER_SCENE,
   DEFAULT_VOICE_TUNING,
   fullAiSteps,
+  maxShotCount,
   projectLanguage,
+  sourceCutShots,
+  uploadSourceRef,
   type BudgetCheck,
   type FullAiRequest,
   type FullAiStep,
+  type LibraryMedia,
   type MediaRankRequest,
   type Project,
   type SkillGuidance,
+  type SourcePart,
   type VoiceSettings,
 } from "@studio/domain";
 
-import type { AiPort } from "../ports/ai";
+import type { AiPort, AiResolver } from "../ports/ai";
 import type { CostGuardPort } from "../ports/cost-guard";
+import type { MediaLibraryRepository } from "../ports/media-library";
 import type { ProjectRepository } from "../ports/project-repository";
 import type { SkillCatalogPort } from "../ports/skill-catalog";
 import type { TtsPort } from "../ports/tts";
@@ -26,6 +32,7 @@ import { resolveSkill } from "../skill/skills";
 export interface FullAiDeps {
   repo: ProjectRepository;
   ai: AiPort;
+  resolveAi?: AiResolver;
   /** Null without a TTS provider: the voice step is left out. */
   tts: TtsPort | null;
   /** From the environment; the estimate only needs the model. */
@@ -33,6 +40,8 @@ export interface FullAiDeps {
   costGuard: CostGuardPort;
   /** Installed skills; without it a request naming a skill is refused. */
   skills?: SkillCatalogPort;
+  /** Tells whether a source video is analyzed already (ADR 0020); without it, it is counted as not. */
+  library?: MediaLibraryRepository;
 }
 
 export interface FullAiInput {
@@ -86,6 +95,18 @@ function plannedNarration(project: Project, request: FullAiRequest, steps: reado
   return { script, sceneCount, sceneText: sampleText(words), visualScenes: sceneCount };
 }
 
+/** Whether the hook or the ending was asked for. */
+const sourcePart = (part: SourcePart | undefined) => part !== undefined && part.kind !== "none";
+
+/** On a source video: the narration of the target length, shared by the main scene, the hook and the ending. */
+function sourceNarration(request: FullAiRequest) {
+  const wordsTotal = Math.round(request.targetDurationSec * WORDS_PER_SECOND);
+  // One long main scene (ADR 0020), plus the hook and the ending.
+  const sceneCount = 1 + [request.sourceVideo?.hook, request.sourceVideo?.outro].filter(sourcePart).length;
+  const sceneText = sampleText(Math.max(1, Math.ceil(wordsTotal / sceneCount)));
+  return { script: "", sceneCount, sceneText, visualScenes: 0 };
+}
+
 /**
  * What a Full AI run would cost, step by step, and whether its worst case fits the budgets. Free:
  * it counts tokens and characters, nothing is generated. Later steps are estimated from the target
@@ -93,11 +114,12 @@ function plannedNarration(project: Project, request: FullAiRequest, steps: reado
  */
 export function makeEstimateFullAi(deps: FullAiDeps) {
   async function aiStep(
+    ai: AiPort,
     step: FullAiStep,
     tasks: Parameters<AiPort["estimate"]>[0][],
     guidance?: SkillGuidance,
   ) {
-    const estimates = await Promise.all(tasks.map((task) => deps.ai.estimate(task, guidance)));
+    const estimates = await Promise.all(tasks.map((task) => ai.estimate(task, guidance)));
     return {
       estimate: {
         step,
@@ -119,15 +141,42 @@ export function makeEstimateFullAi(deps: FullAiDeps) {
     );
   }
 
+  /** The source video's library copy, when there is one, and the shots the cut will be shown. */
+  async function sourceVideoState(project: Project, request: FullAiRequest) {
+    const asset = project.assets.find((candidate) => candidate.id === request.sourceVideo?.assetId);
+    if (!asset || asset.durationMs === undefined) return undefined;
+    const item: LibraryMedia | null =
+      asset.contentHash === undefined || !deps.library
+        ? null
+        : await deps.library.findBySourceRef(uploadSourceRef(asset.contentHash));
+    const durationMs = item?.durationMs ?? asset.durationMs;
+    const shots = item?.analysis
+      ? sourceCutShots(item.analysis)
+      : Array.from({ length: maxShotCount(durationMs) }, (_, i) => ({
+          startMs: Math.floor((durationMs * i) / maxShotCount(durationMs)),
+          endMs: Math.floor((durationMs * (i + 1)) / maxShotCount(durationMs)),
+          description: sampleText(20),
+          textOverlay: false,
+        }));
+    return { item, durationMs, shots };
+  }
+
   return async (input: FullAiInput): Promise<FullAiEstimate> => {
     const project = await deps.repo.get(input.projectId);
-    const steps = fullAiSteps(project.automationSettings, { tts: deps.tts !== null }, input.request.outline);
-    assertFullAiRequest(project, input.request, steps);
+    const ai = deps.resolveAi?.(project.ai) ?? deps.ai;
     const { request } = input;
+    const source = await sourceVideoState(project, request);
+    const steps = fullAiSteps(
+      project.automationSettings,
+      { tts: deps.tts !== null },
+      request.outline,
+      source && { analyzed: source.item?.analysis !== undefined },
+    );
+    assertFullAiRequest(project, request, steps);
     // The skill goes with the script and keyword steps, so it is counted there.
     const language = request.language ?? projectLanguage(project);
     const guidance = await resolveSkill(deps.skills ?? null, request.skillId, language);
-    const planned = plannedNarration(project, request, steps);
+    const planned = source ? sourceNarration(request) : plannedNarration(project, request, steps);
     const sampleScenes = Array.from({ length: planned.sceneCount }, (_, i) => ({
       id: `scene-${String(i + 1)}`,
       narration: planned.sceneText,
@@ -138,6 +187,7 @@ export function makeEstimateFullAi(deps: FullAiDeps) {
       if (step === "script") {
         parts.push(
           await aiStep(
+            ai,
             step,
             [
               {
@@ -157,6 +207,7 @@ export function makeEstimateFullAi(deps: FullAiDeps) {
       } else if (step === "scenes" && !request.outline && project.automationSettings.scenePlanning) {
         parts.push(
           await aiStep(
+            ai,
             step,
             [
               {
@@ -175,6 +226,7 @@ export function makeEstimateFullAi(deps: FullAiDeps) {
       } else if (step === "visual") {
         parts.push(
           await aiStep(
+            ai,
             step,
             [
               {
@@ -209,7 +261,40 @@ export function makeEstimateFullAi(deps: FullAiDeps) {
           };
           tasks.push({ type: "rank_media" as const, input });
         }
-        parts.push(await aiStep(step, tasks));
+        parts.push(await aiStep(ai, step, tasks));
+      } else if (step === "analyze" && source) {
+        // The shots are only known once ffmpeg cuts the video: the most it can have is reserved.
+        const shots = ai.estimateShots(maxShotCount(source.durationMs));
+        parts.push({
+          estimate: { step, expectedUsd: shots.expectedUsd, maxUsd: shots.maxUsd },
+          maxCallUsd: shots.maxUsd,
+        });
+      } else if (step === "cut" && source) {
+        parts.push(
+          await aiStep(
+            ai,
+            step,
+            [
+              {
+                type: "source_cut",
+                input: {
+                  idea: request.idea ?? "",
+                  targetDurationSec: request.targetDurationSec,
+                  ...(request.tone !== undefined && { tone: request.tone }),
+                  durationMs: source.durationMs,
+                  shots: source.shots,
+                  ...(request.sourceVideo?.script && { script: request.sourceVideo.script }),
+                  // The clip lengths only change a few words of the prompt.
+                  ...(sourcePart(request.sourceVideo?.hook) && { hook: { kind: "clip" as const } }),
+                  ...(sourcePart(request.sourceVideo?.outro) && { outro: { kind: "clip" as const } }),
+                  ...(request.skillId !== undefined && { skillId: request.skillId }),
+                  language,
+                },
+              },
+            ],
+            guidance,
+          ),
+        );
       } else if (step === "voice" && deps.tts) {
         const voice = voiceFor(project, deps.tts);
         const perScene = deps.tts.estimate(planned.sceneText, voice).usd;

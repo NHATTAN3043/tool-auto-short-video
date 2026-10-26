@@ -42,6 +42,8 @@ import {
   type ScriptSuggestion,
   type SkillGuidance,
   type ShotDescriptions,
+  type SourceCutRequest,
+  type SourceCutSuggestion,
   type SkillSummary,
   type VisualPlanRequest,
   type VisualPlansSuggestion,
@@ -597,6 +599,30 @@ export class FakeAi implements AiPort {
     guidance?: SkillGuidance,
   ): Promise<AiCall<ScriptOutlineSuggestion>> {
     return this.answer({ type: "script_outline", input }, this.outline, guidance);
+  }
+
+  /** Replaces the default cut (all shots as one main scene, plus the hook and ending asked for) when set. */
+  sourceCut: SourceCutSuggestion | null = null;
+
+  planSourceCut(input: SourceCutRequest, guidance?: SkillGuidance): Promise<AiCall<SourceCutSuggestion>> {
+    const extra = (part: SourceCutRequest["hook"], narration: string) =>
+      part === undefined
+        ? undefined
+        : part.kind === "source"
+          ? { narration, fromShot: 0, toShot: 0 }
+          : { narration };
+    const hook = extra(input.hook, "Xem này!");
+    const outro = extra(input.outro, "Theo dõi nhé.");
+    return this.answer(
+      { type: "source_cut", input },
+      this.sourceCut ?? {
+        title: "Nguồn",
+        ...(hook && { hook }),
+        main: [{ fromShot: 0, toShot: input.shots.length - 1, narration: "Lời kể liền mạch." }],
+        ...(outro && { outro }),
+      },
+      guidance,
+    );
   }
 
   /** Requests and stills received by each describeShots call. */

@@ -16,6 +16,7 @@ import {
   FakeClipFrames,
   FakeClock,
   FakeCostGuard,
+  FakeMediaProbe,
   InMemoryJobQueue,
   InMemoryMediaLibrary,
   InMemoryProjectRepository,
@@ -65,6 +66,8 @@ async function setup() {
   const costGuard = new FakeCostGuard(undefined, clock);
   const ai = new FakeAi();
   const frames = new FakeClipFrames(storage);
+  const probeResult = { kind: "video" as const, durationMs: 9000, hasAudio: true };
+  const probe = new FakeMediaProbe(storage, { mp4: probeResult });
   frames.cuts = [2000, 5000];
   await repo.save(createProject({ name: "P", mode: "manual" }, { newId: () => "prj_1" }));
   for (const item of [clip("lib_a"), clip("lib_b"), clip("lib_img", { kind: "image" })]) {
@@ -73,7 +76,7 @@ async function setup() {
   }
   let jobs = 0;
   const deps = { repo, library, ai, costGuard };
-  const analyze = makeAnalyzeClips({ library, storage, frames, ai: () => ai, clock });
+  const analyze = makeAnalyzeClips({ library, storage, frames, probe, ai: () => ai, clock });
   const run = makeRunNextRenderJob({
     queue,
     renderProject: () => Promise.reject(new Error("not a render")),
@@ -89,6 +92,8 @@ async function setup() {
     costGuard,
     ai,
     frames,
+    probe,
+    probeResult,
     analyze,
     run,
     estimate: makeEstimateClipAnalysis(deps),
@@ -161,6 +166,35 @@ describe("estimating and queuing a clip analysis", () => {
 });
 
 describe("analyzing clips in the worker", () => {
+  it("re-probes an old library duration before picking frames or describing shots", async () => {
+    const s = await setup();
+    await s.library.add(clip("lib_old", { durationMs: 62_037 }));
+    s.probeResult.durationMs = 57_367;
+    s.frames.cuts = [55_000, 58_000, 60_000];
+    const result = await s.analyze({ job: clipJob(["lib_old"]) });
+    expect(result.failed).toEqual([]);
+    expect(result.analyzed).toEqual(["lib_old"]);
+    const request = s.ai.shotCalls[0]?.input;
+    expect(request?.durationMs).toBe(57_367);
+    expect(request?.shots.at(-1)?.endMs).toBe(57_367);
+    expect(request?.shots.every((shot) => shot.endMs <= 57_367)).toBe(true);
+    expect(s.frames.grabbed[0]?.atMs.every((ms) => ms < 57_367)).toBe(true);
+    // No bulk rewrite: only the saved analysis uses the corrected duration.
+    expect((await s.library.get("lib_old")).durationMs).toBe(62_037);
+  });
+
+  it("fails before the AI call when the file is unreadable or has no usable picture duration", async () => {
+    const s = await setup();
+    s.probe.failProbe = true;
+    expect((await s.analyze({ job: clipJob(["lib_a"]) })).failed[0]?.message).toContain("unreadable");
+    s.probe.failProbe = false;
+    s.probeResult.durationMs = 0;
+    expect((await s.analyze({ job: clipJob(["lib_a"]) })).failed[0]?.message).toContain("thời lượng hình");
+    expect(s.frames.grabbed).toEqual([]);
+    expect(s.ai.shotCalls).toEqual([]);
+    expect(shotFiles(s.storage)).toEqual([]);
+  });
+
   it("cuts each video into shots, keeps a still per shot and saves what the AI says", async () => {
     const s = await setup();
     const progress: number[] = [];

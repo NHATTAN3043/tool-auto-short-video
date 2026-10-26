@@ -21,8 +21,12 @@ export interface RenderPlanVideo {
   volume: number;
   /** First source frame to play (Remotion `trimBefore`). */
   startFrom: number;
-  /** Length of the chosen source segment. */
+  /** Length of the chosen source segment, in source frames (Remotion `durationInFrames`). */
   segmentFrames: number;
+  /** Remotion `playbackRate`; trims stay in source frames, the segment lasts segmentFrames / rate. */
+  playbackRate: number;
+  /** How long the segment lasts on the timeline at that rate: the `<Loop>` length. */
+  playedFrames: number;
   /** True when the segment is shorter than the sequence and must be wrapped in `<Loop>`. */
   loop: boolean;
 }

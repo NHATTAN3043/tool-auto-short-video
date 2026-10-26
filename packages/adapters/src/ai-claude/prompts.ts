@@ -10,6 +10,8 @@ import type {
   ScriptOutlineRequest,
   ScriptRequest,
   SkillGuidance,
+  SourceCutRequest,
+  SourceCutSuggestion,
   VisualPlan,
   VisualPlanRequest,
 } from "@studio/domain";
@@ -115,6 +117,8 @@ const SKILL_FOCUS: Record<Exclude<AiTask["type"], "rank_media">, string> = {
   brief_questions:
     "Dùng tài liệu để biết điều gì quyết định câu móc, nhịp và lời kêu gọi, rồi hỏi đúng những điều đó. Câu hỏi luôn viết bằng tiếng Việt.",
   script_outline: "Dùng tài liệu để chọn câu móc mở đầu, nhịp giữ chân người xem và lời kêu gọi cuối video.",
+  source_cut:
+    "Dùng tài liệu để chọn khúc mở đầu, câu móc và nhịp giữ chân người xem; lời đọc vẫn phải bám đúng những gì video chiếu.",
 };
 
 /**
@@ -369,3 +373,118 @@ export function shotsIntro(input: DescribeShotsRequest): string {
 
 export const shotLabel = (shot: DescribeShotsRequest["shots"][number], index: number) =>
   `Shot ${String(index + 1)} (${seconds(shot.startMs)}–${seconds(shot.endMs)}):`;
+
+/**
+ * Full AI on a source video (ADR 0020). Shot numbers from 1, like the shot list. The hook and the ending are
+ * flat fields that are always there (empty or 0 when not asked for): structured outputs of every provider
+ * take them, unlike optional objects. sourceCutFromOutput maps the answer back.
+ */
+export const SourceCutOutputSchema = z.object({
+  title: z.string().describe("Tiêu đề ngắn cho video, cùng ngôn ngữ với lời đọc"),
+  hookNarration: z.string().describe("Lời đọc đoạn mở đầu (hook); rỗng nếu không được yêu cầu"),
+  hookFromShot: z.number().int().describe("Shot N đầu của đoạn mở đầu khi cắt từ video nguồn; 0 nếu không"),
+  hookToShot: z.number().int().describe("Shot N cuối của đoạn mở đầu khi cắt từ video nguồn; 0 nếu không"),
+  main: z.array(
+    z.object({
+      fromShot: z.number().int().describe("Số Shot N đầu tiên của cảnh"),
+      toShot: z.number().int().describe("Số Shot N cuối cùng của cảnh"),
+      narration: z.string().describe("Lời đọc liền mạch của cả cảnh"),
+    }),
+  ),
+  outroNarration: z.string().describe("Lời đọc đoạn kết kêu gọi; rỗng nếu không được yêu cầu"),
+  outroFromShot: z.number().int().describe("Shot N đầu của đoạn kết khi cắt từ video nguồn; 0 nếu không"),
+  outroToShot: z.number().int().describe("Shot N cuối của đoạn kết khi cắt từ video nguồn; 0 nếu không"),
+});
+
+/** The provider's answer in the domain shape: shots back to positions, the hook and ending only when asked. */
+export function sourceCutFromOutput(
+  data: z.infer<typeof SourceCutOutputSchema>,
+  input: SourceCutRequest,
+): SourceCutSuggestion {
+  const toIndex = (shot: number) => Math.max(0, shot - 1);
+  const extra = (asked: SourceCutRequest["hook"], narration: string, fromShot: number, toShot: number) =>
+    asked === undefined
+      ? undefined
+      : asked.kind === "source"
+        ? { narration, fromShot: toIndex(fromShot), toShot: toIndex(toShot) }
+        : { narration };
+  const hook = extra(input.hook, data.hookNarration, data.hookFromShot, data.hookToShot);
+  const outro = extra(input.outro, data.outroNarration, data.outroFromShot, data.outroToShot);
+  return {
+    title: data.title,
+    ...(hook && { hook }),
+    // The domain refuses runs out of order or out of range.
+    main: data.main.map(({ fromShot, toShot, narration }) => ({
+      fromShot: toIndex(fromShot),
+      toShot: toIndex(toShot),
+      narration,
+    })),
+    ...(outro && { outro }),
+  };
+}
+
+const SOURCE_SCRIPT_TEXT = {
+  reference: [
+    "Thoại / phụ đề gốc của video, chỉ để hiểu video đang nói gì. Viết lời đọc mới bám theo nội dung này,",
+    "không chép nguyên văn:",
+  ],
+  narration: [
+    "Lời đọc người dùng đã viết. Phần chính GIỮ NGUYÊN từng chữ và đúng thứ tự; chỉ được bỏ bớt câu khi video",
+    "không đủ dài. Câu mở đầu / kêu gọi có sẵn trong kịch bản thì dùng nguyên cho đoạn mở đầu / kết:",
+  ],
+} as const;
+
+/** One line per shot: its number, when it plays, and what the clip analysis saw in it. */
+export const sourceShotLine = (shot: SourceCutRequest["shots"][number], index: number) =>
+  `Shot ${String(index + 1)} (${seconds(shot.startMs)}–${seconds(shot.endMs)}, dài ${seconds(shot.endMs - shot.startMs)}): ${shot.description}${shot.textOverlay ? " [có chữ/logo in sẵn]" : ""}`;
+
+/** What to write for the hook or the ending, or that there is none. */
+function extraRule(
+  name: "Mở đầu (hook)" | "Kết",
+  part: SourceCutRequest["hook"],
+  goal: string,
+  fromSource: string,
+): string {
+  if (part === undefined) return `- ${name}: KHÔNG có; để lời rỗng và số shot 0.`;
+  if (part.kind === "source") return `- ${name}: ${goal} ${fromSource}`;
+  const length =
+    part.durationMs === undefined ? "một ảnh tĩnh" : `một clip riêng dài ${seconds(part.durationMs)}`;
+  return `- ${name}: ${goal} Hình là ${length} của người dùng: viết lời vừa độ dài đó, số shot để 0.`;
+}
+
+export function sourceCutPrompt(input: SourceCutRequest): string {
+  const target = String(input.targetDurationSec);
+  const script = input.script ? ["", ...SOURCE_SCRIPT_TEXT[input.script.role], input.script.text] : [];
+  return [
+    `Làm một video dọc tổng cộng khoảng ${target} giây, phần chính kể chuyện bám sát MỘT video nguồn dài ${seconds(input.durationMs)}.`,
+    "Video nguồn đã được cắt thành các shot ở chỗ chuyển cảnh, liệt kê theo thứ tự thời gian ở cuối.",
+    "Mỗi cảnh sẽ dài đúng bằng giọng đọc của nó: video được chiếu nhanh/chậm hơn tối đa khoảng 20% cho khớp giọng.",
+    "Quy tắc:",
+    "- Phần chính (main) là MỘT cảnh dài liền mạch: một dải shot liền nhau fromShot..toShot, kèm một lời kể liên tục theo đúng trình tự những gì video chiếu.",
+    "- Chỉ tách phần chính thành 2-3 cảnh khi nội dung video đổi hẳn (chuyện khác, nơi khác); các cảnh theo đúng thứ tự thời gian, không chồng nhau. Không chia nhỏ để đổi hình.",
+    "- Được bỏ khúc thừa ở đầu/cuối hoặc khúc nhạt, nhưng giữ phần còn lại liền mạch.",
+    "- Lời của mỗi cảnh chính dài khoảng 2,5 từ cho mỗi giây video của cảnh (sai lệch tối đa 20%).",
+    extraRule(
+      "Mở đầu (hook)",
+      input.hook,
+      "1-2 câu móc gây tò mò, khoảng 3-5 giây.",
+      "Chọn khúc gay cấn nhất của video nguồn (2-6 giây, có thể trùng phần chính) để chiếu trước như teaser.",
+    ),
+    extraRule(
+      "Kết",
+      input.outro,
+      "1-2 câu kêu gọi theo dõi / bình luận, khoảng 3-5 giây.",
+      "Chọn khúc cuối hoặc khúc đẹp của video nguồn (2-6 giây) làm nền.",
+    ),
+    "- Tổng lời đọc của mở đầu, phần chính và kết vừa với tổng thời lượng mục tiêu.",
+    "- Hạn chế shot có chữ/logo in sẵn khi có shot khác thay được.",
+    input.tone ? `Giọng văn: ${input.tone}.` : "",
+    ...(input.idea === "" ? [] : ["", "Yêu cầu của người dùng:", input.idea]),
+    ...script,
+    "",
+    "Các shot:",
+    ...input.shots.map(sourceShotLine),
+  ]
+    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
+    .join("\n");
+}

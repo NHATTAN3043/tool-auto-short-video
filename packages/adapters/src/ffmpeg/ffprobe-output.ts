@@ -64,6 +64,9 @@ export function interpretProbe(output: FfprobeOutput): ProbeResult {
   const durationMs = durationSeconds === undefined ? undefined : Math.round(durationSeconds * 1000);
 
   if (visual) {
+    // The audio/container can outlast the picture. Seeking frames must use the video stream's length.
+    const visualSeconds = seconds(visual.duration);
+    const videoSeconds = visualSeconds !== undefined && visualSeconds > 0 ? visualSeconds : durationSeconds;
     const rotated = rotationDegrees(visual) % 180 === 90;
     const width = rotated ? visual.height : visual.width;
     const height = rotated ? visual.width : visual.height;
@@ -78,7 +81,7 @@ export function interpretProbe(output: FfprobeOutput): ProbeResult {
       hasAudio: audio !== undefined,
       ...size,
       ...codec,
-      ...(durationMs !== undefined && { durationMs }),
+      ...(videoSeconds !== undefined && { durationMs: Math.round(videoSeconds * 1000) }),
       ...(fps !== undefined && { fps }),
     };
   }

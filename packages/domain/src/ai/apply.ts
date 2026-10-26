@@ -17,6 +17,8 @@ export const AI_TASK_TOGGLES: Readonly<Record<AiTaskType, keyof AutomationSettin
   // The questions and the outline are the first half of writing the script (ADR 0015).
   brief_questions: "scriptGeneration",
   script_outline: "scriptGeneration",
+  // Cutting a source video into scenes and writing their narration (ADR 0020).
+  source_cut: "scenePlanning",
 };
 
 export function assertAiTaskAllowed(project: Project, task: AiTask): void {
@@ -48,6 +50,8 @@ export function withProjectLanguage(task: AiTask, project: Project): AiTask {
     case "brief_questions":
       return { ...task, input: { ...task.input, language } };
     case "script_outline":
+      return { ...task, input: { ...task.input, language } };
+    case "source_cut":
       return { ...task, input: { ...task.input, language } };
     case "visual":
     case "rank_media":

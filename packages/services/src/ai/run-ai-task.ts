@@ -7,6 +7,7 @@ import {
   normalizeSceneRewrite,
   normalizeScriptOutline,
   normalizeScriptSuggestion,
+  normalizeSourceCut,
   normalizeVisualPlans,
   type AiResult,
   type AiTask,
@@ -14,7 +15,7 @@ import {
   type SkillGuidance,
 } from "@studio/domain";
 
-import { AiCallError, type AiPort, type RankImage } from "../ports/ai";
+import { AiCallError, type AiPort, type AiResolver, type RankImage } from "../ports/ai";
 import type { PaidPortFactory } from "../ports/cost-guard";
 import type { SkillCatalogPort } from "../ports/skill-catalog";
 import type { StoragePort } from "../ports/storage";
@@ -91,6 +92,12 @@ async function call(
         usage,
       };
     }
+    case "source_cut": {
+      const { data, usage } = await ai.planSourceCut(task.input, guidance);
+      // Checked like in a Full AI run; the answer is kept as the AI gave it, shots and all.
+      normalizeSourceCut(data, task.input);
+      return { type: "source_cut", suggestion: data, usage };
+    }
   }
 }
 
@@ -101,6 +108,7 @@ async function call(
  */
 export function makeRunAiTask(deps: {
   ai: PaidPortFactory<AiPort>;
+  resolveAi?: (config: Parameters<AiResolver>[0]) => PaidPortFactory<AiPort>;
   storage: StoragePort;
   /** Thumbnails for vision ranking; without it every ranking reads descriptions only. */
   rankImages?: ResolveRankImages;
@@ -114,8 +122,9 @@ export function makeRunAiTask(deps: {
       // Read here, not when queued: the skill file may have changed or been removed since.
       const task = job.ai.task;
       const guidance = await resolveSkill(deps.skills ?? null, taskSkillId(task), taskLanguage(task));
+      const factory = deps.resolveAi?.(job.ai.config) ?? deps.ai;
       result = await call(
-        deps.ai({ projectId: job.projectId, jobId: job.id }),
+        factory({ projectId: job.projectId, jobId: job.id }),
         task,
         deps.rankImages ?? noImages,
         guidance,

@@ -52,7 +52,7 @@ const MESSAGES: Record<DomainErrorCode, string> = {
   PROJECT_BUSY: "Dự án đang render hoặc chạy AI. Đợi xong rồi thử lại.",
   TTS_UNAVAILABLE: "Chưa cấu hình dịch vụ tạo giọng (ELEVENLABS_API_KEY).",
   TTS_FAILED: "Dịch vụ tạo giọng báo lỗi. Kiểm tra API key và hạn mức rồi thử lại.",
-  AI_UNAVAILABLE: "Chưa cấu hình dịch vụ AI (ANTHROPIC_API_KEY).",
+  AI_UNAVAILABLE: "Chưa cấu hình dịch vụ AI (ANTHROPIC_API_KEY hoặc OPENAI_API_KEY).",
   AI_FAILED: "Dịch vụ AI báo lỗi. Kiểm tra API key và số dư rồi thử lại.",
   AI_REFUSED: "AI từ chối yêu cầu này. Hãy diễn đạt lại.",
   AI_INVALID_OUTPUT: "AI trả về kết quả không dùng được. Vui lòng thử lại.",

@@ -18,6 +18,7 @@ export {
   type AiCallErrorCode,
   type AiEstimate,
   type AiPort,
+  type AiResolver,
   type RankImage,
 } from "./ports/ai";
 export type { SkillCatalogPort } from "./ports/skill-catalog";
@@ -141,7 +142,13 @@ export {
   type AddUploadToLibraryResult,
 } from "./media-search/add-upload-to-library";
 export { makeProxyStockMedia } from "./media-search/proxy-stock-media";
-export { makeAnalyzeClips, SHOT_FRAME_MAX_SIDE, type AnalyzeClipsResult } from "./clip/analyze-clips";
+export {
+  analyzeLibraryClip,
+  makeAnalyzeClips,
+  SHOT_FRAME_MAX_SIDE,
+  type AnalyzeClipDeps,
+  type AnalyzeClipsResult,
+} from "./clip/analyze-clips";
 export {
   makeEstimateClipAnalysis,
   makeRequestClipAnalysis,

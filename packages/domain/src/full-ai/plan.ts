@@ -15,6 +15,8 @@ export const FULL_AI_STEP_LABELS: Readonly<Record<FullAiStep, string>> = {
   media: "Tìm media",
   rank: "Xếp hạng media",
   select: "Chọn media",
+  analyze: "Phân tích video nguồn",
+  cut: "Dựng theo video nguồn",
   voice: "Tạo giọng",
 };
 
@@ -24,13 +26,22 @@ export const FULL_AI_STEP_LABELS: Readonly<Record<FullAiStep, string>> = {
  * `visualKeywords` adds search queries. The shared library is searched even without `mediaSearch`.
  * With an approved outline (ADR 0015) no script is written: the outline becomes the scenes, and only
  * the scenes without a visual plan get one, when either AI toggle allows it.
+ * On a source video (ADR 0020) the cut makes the scenes with their media: the video is analyzed first
+ * unless it already is, and no media is searched.
  */
 export function fullAiSteps(
   settings: AutomationSettings,
   available: { tts: boolean },
   outline?: FullAiOutline,
+  source?: { analyzed: boolean },
 ): FullAiStep[] {
   const steps: FullAiStep[] = [];
+  if (source) {
+    if (!source.analyzed) steps.push("analyze");
+    steps.push("cut");
+    if (settings.voiceGeneration && available.tts) steps.push("voice");
+    return steps;
+  }
   if (outline) {
     steps.push("scenes");
     if (outlineScenesWithoutPlan(outline) > 0 && (settings.scenePlanning || settings.visualKeywords)) {
@@ -82,16 +93,52 @@ export function isPaidFullAiStep(
   withOutline = false,
 ): boolean {
   if (step === "scenes") return !withOutline && settings.scenePlanning;
-  return step === "script" || step === "visual" || step === "rank" || step === "voice";
+  return (
+    step === "script" ||
+    step === "visual" ||
+    step === "rank" ||
+    step === "analyze" ||
+    step === "cut" ||
+    step === "voice"
+  );
 }
 
-/** Refuses a run that cannot start: no idea and no script, or scenes the user did not agree to replace. */
+/**
+ * Refuses a run that cannot start: no idea and no script, a source video, hook or ending clip that is
+ * missing, or scenes the user did not agree to replace.
+ */
 export function assertFullAiRequest(
   project: Project,
   request: FullAiRequest,
   steps: readonly FullAiStep[],
 ): void {
-  if (request.outline) {
+  const source = request.sourceVideo;
+  if (source) {
+    const asset = project.assets.find((candidate) => candidate.id === source.assetId);
+    if (!asset || asset.kind !== "video" || !asset.durationMs) {
+      throw new DomainError(
+        "INVALID_MEDIA",
+        "Source video must be an uploaded project video with a duration",
+      );
+    }
+    if (asset.contentHash === undefined) {
+      throw new DomainError("INVALID_MEDIA", "Source video has no content hash; upload it again");
+    }
+    // The target is the whole short: a hook and an ending may make it longer than the source.
+    for (const part of [source.hook, source.outro]) {
+      if (part?.kind !== "asset") continue;
+      const clip = project.assets.find((candidate) => candidate.id === part.assetId);
+      if (!clip || (clip.kind !== "video" && clip.kind !== "image")) {
+        throw new DomainError("INVALID_MEDIA", "The hook and the ending must be project videos or images");
+      }
+    }
+    if (request.outline) {
+      throw new DomainError("INVALID_INPUT", "A source video run does not take an outline");
+    }
+    if ((request.idea ?? "").length < 3 && source.script === undefined) {
+      throw new DomainError("INVALID_INPUT", "Describe the video or give its script");
+    }
+  } else if (request.outline) {
     // The outline is the script; the schema guarantees at least one scene.
   } else if (steps.includes("script")) {
     if ((request.idea ?? "").length < 3) {

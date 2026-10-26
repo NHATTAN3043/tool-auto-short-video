@@ -1,7 +1,7 @@
 "use client";
 
 import { PlayIcon } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { Button } from "@/shared/ui/button";
 import { Label } from "@/shared/ui/label";
@@ -31,6 +31,7 @@ export function SegmentPicker({
   value,
   onChange,
   onCommit,
+  playbackRate = 1,
 }: {
   src: string;
   /** From the probe; when missing, the browser's reading of the file is used. */
@@ -39,11 +40,16 @@ export function SegmentPicker({
   onChange: (segment: Segment) => void;
   /** Ends a drag or a button press, so it becomes one undo step. */
   onCommit: () => void;
+  playbackRate?: number;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const [loadedDurationMs, setLoadedDurationMs] = useState<number | null>(null);
   const openEndId = useId();
   const durationMs = probedDurationMs ?? loadedDurationMs;
+
+  useEffect(() => {
+    if (video.current) video.current.playbackRate = playbackRate;
+  }, [playbackRate]);
 
   const seek = (ms: number) => {
     if (video.current) video.current.currentTime = ms / 1000;
@@ -64,6 +70,7 @@ export function SegmentPicker({
         playsInline
         className="aspect-video w-full rounded-md bg-black"
         onLoadedMetadata={(event) => {
+          event.currentTarget.playbackRate = playbackRate;
           const seconds = event.currentTarget.duration;
           if (Number.isFinite(seconds)) setLoadedDurationMs(Math.round(seconds * 1000));
           event.currentTarget.currentTime = value.sourceStartMs / 1000;

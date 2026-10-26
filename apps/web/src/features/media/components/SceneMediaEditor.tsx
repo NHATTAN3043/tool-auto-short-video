@@ -2,7 +2,7 @@
 
 import { MediaFitSchema, type MediaAsset, type SceneMedia, type SceneMediaPatch } from "@studio/domain";
 import { ImagePlusIcon, XIcon } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 
 import { Button } from "@/shared/ui/button";
 import { Label } from "@/shared/ui/label";
@@ -15,6 +15,7 @@ import { formatPercent } from "../format";
 import { FIT_LABELS } from "../labels";
 import { AssetThumbnail, AssetTile } from "./AssetTile";
 import { SegmentPicker } from "./SegmentPicker";
+import { VideoSpeedControl } from "./VideoSpeedControl";
 
 export interface SceneMediaActions {
   onAssign: (assetId: string) => void;
@@ -22,6 +23,9 @@ export interface SceneMediaActions {
   onClear: () => void;
   /** Ends a slider drag, so the drag is one undo step. */
   onCommit: () => void;
+  /** "Khớp tốc độ với giọng" (ADR 0021). */
+  onFitSpeed: () => void;
+  onPlaybackRateChange: (playbackRate: number) => void;
 }
 
 function PercentSlider({
@@ -92,7 +96,9 @@ export function SceneMediaEditor({
   media,
   assets,
   logoAssetId,
+  hasVoice,
   actions,
+  renderLibraryPicker,
 }: {
   projectId: string;
   sceneLabel: string;
@@ -100,9 +106,14 @@ export function SceneMediaEditor({
   assets: readonly MediaAsset[];
   /** The channel logo, never offered as a scene's picture. */
   logoAssetId?: string | undefined;
+  /** The scene has its own voice, so its video can be fitted to it. */
+  hasVoice: boolean;
   actions: SceneMediaActions;
+  renderLibraryPicker?: (onPicked: () => void) => ReactNode;
 }) {
   const [picking, setPicking] = useState(false);
+  const [source, setSource] = useState<"project" | "library">(media ? "project" : "library");
+  const pickerId = useId();
   const fitName = useId();
   const kenBurnsId = useId();
   const visuals = assets.filter((asset) => asset.kind !== "audio" && asset.id !== logoAssetId);
@@ -130,7 +141,54 @@ export function SceneMediaEditor({
             </Button>
           ) : null}
         </div>
-        <MediaPicker projectId={projectId} visuals={visuals} selectedId={media?.assetId} onPick={pick} />
+        {renderLibraryPicker ? (
+          <div role="tablist" aria-label="Nguồn chọn media" className="flex gap-2">
+            {(["project", "library"] as const).map((tab) => (
+              <Button
+                key={tab}
+                id={`${pickerId}-${tab}`}
+                role="tab"
+                aria-selected={source === tab}
+                aria-controls={`${pickerId}-panel`}
+                tabIndex={source === tab ? 0 : -1}
+                variant={source === tab ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => {
+                  setSource(tab);
+                }}
+                onKeyDown={(event) => {
+                  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                  event.preventDefault();
+                  const next =
+                    event.key === "Home"
+                      ? "project"
+                      : event.key === "End"
+                        ? "library"
+                        : source === "project"
+                          ? "library"
+                          : "project";
+                  setSource(next);
+                  document.getElementById(`${pickerId}-${next}`)?.focus();
+                }}
+              >
+                {tab === "project" ? "File dự án" : "Kho chung"}
+              </Button>
+            ))}
+          </div>
+        ) : null}
+        <div
+          id={`${pickerId}-panel`}
+          role={renderLibraryPicker ? "tabpanel" : undefined}
+          aria-labelledby={renderLibraryPicker ? `${pickerId}-${source}` : undefined}
+        >
+          {source === "library" && renderLibraryPicker ? (
+            renderLibraryPicker(() => {
+              setPicking(false);
+            })
+          ) : (
+            <MediaPicker projectId={projectId} visuals={visuals} selectedId={media?.assetId} onPick={pick} />
+          )}
+        </div>
       </div>
     );
   }
@@ -157,6 +215,7 @@ export function SceneMediaEditor({
           variant="outline"
           size="xs"
           onClick={() => {
+            setSource("project");
             setPicking(true);
           }}
         >
@@ -176,6 +235,7 @@ export function SceneMediaEditor({
 
       {asset.kind === "video" ? (
         <SegmentPicker
+          playbackRate={media.playbackRate ?? 1}
           src={projectFileUrl(projectId, asset.path)}
           durationMs={asset.durationMs}
           value={{ sourceStartMs: media.sourceStartMs, sourceEndMs: media.sourceEndMs ?? null }}
@@ -217,6 +277,16 @@ export function SceneMediaEditor({
             actions.onChange({ focusX });
           }}
           onCommit={actions.onCommit}
+        />
+      ) : null}
+
+      {asset.kind === "video" ? (
+        <VideoSpeedControl
+          value={media.playbackRate ?? 1}
+          canFitToVoice={hasVoice && (media.sourceEndMs ?? asset.durationMs ?? 0) > media.sourceStartMs}
+          onChange={actions.onPlaybackRateChange}
+          onCommit={actions.onCommit}
+          onFitSpeed={actions.onFitSpeed}
         />
       ) : null}
 

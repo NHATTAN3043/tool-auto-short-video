@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { AiConfigSchema } from "../ai/config";
 import { MediaAssetSchema } from "../media/schema";
 import { MediaRankingModeSchema } from "../media/search";
 import { SceneSchema } from "../scene/schema";
@@ -89,6 +90,8 @@ export const ProjectSchema = z.object({
   name: z.string().min(1),
   mode: AutomationModeSchema,
   automationSettings: AutomationSettingsSchema,
+  /** AI used by this project. Missing on older projects means the legacy Claude default. */
+  ai: AiConfigSchema.optional(),
   width: z.literal(1080),
   height: z.literal(1920),
   fps: z.literal(30),

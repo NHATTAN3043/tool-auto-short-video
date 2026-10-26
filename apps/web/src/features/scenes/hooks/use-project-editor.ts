@@ -184,6 +184,13 @@ export function useProjectEditor(initial: Project) {
     updateMedia: (sceneId: string, patch: SceneMediaPatch) => {
       dispatch({ type: "updateMedia", sceneId, patch });
     },
+    /** Manual fitting changes media speed only, preserving the scene's duration. */
+    fitSpeed: (sceneId: string) => {
+      dispatch({ type: "fitSpeed", sceneId });
+    },
+    setPlaybackRate: (sceneId: string, playbackRate: number) => {
+      dispatch({ type: "setPlaybackRate", sceneId, playbackRate });
+    },
     clearMedia: (sceneId: string) => {
       dispatch({ type: "clearMedia", sceneId });
     },

@@ -65,12 +65,17 @@ Copy-Item .env.example .env
 | Biến                 | Dùng để                                        | Lấy ở đâu                                                                                                  |
 | -------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `ANTHROPIC_API_KEY`  | AI viết script, chia cảnh, gợi ý hình, Full AI | [Claude Console](https://platform.claude.com) → API Keys (tính phí riêng, không dùng chung gói Claude Pro) |
+| `OPENAI_API_KEY`     | Nhà cung cấp AI thay thế, chọn theo từng dự án | [OpenAI Platform](https://platform.openai.com/api-keys) → API Keys                                         |
 | `ELEVENLABS_API_KEY` | Tạo giọng đọc cho từng cảnh                    | [ElevenLabs](https://elevenlabs.io) → API Keys; cần quyền "Text to Speech" và "Voices: read"               |
 | `PEXELS_API_KEY`     | Tìm video/ảnh miễn phí trên Pexels             | [pexels.com/api](https://www.pexels.com/api/)                                                              |
 | `PIXABAY_API_KEY`    | Tìm video/ảnh miễn phí trên Pixabay            | [pixabay.com/api/docs](https://pixabay.com/api/docs/) (đăng nhập để xem key)                               |
 | `DATABASE_URL`       | Lưu dữ liệu bằng PostgreSQL thay cho file JSON | Xem mục 4                                                                                                  |
 
 Ý nghĩa từng biến còn lại (ngân sách chi tiêu, model AI, thư mục lưu trữ…) được ghi chú ngay trong `.env.example`.
+
+Khi có ít nhất một API key AI, mở **Cài đặt dự án** để chọn Claude hoặc OpenAI và model. Danh sách model được
+lấy từ tài khoản provider rồi lọc bằng `ANTHROPIC_AI_MODEL_PATTERNS` hoặc `OPENAI_AI_MODEL_PATTERNS`; API key
+luôn chỉ ở phía server.
 
 > **Giữ bí mật file `.env`.** File này đã nằm trong `.gitignore`, đừng commit hay gửi cho người khác vì nó chứa
 > API key.

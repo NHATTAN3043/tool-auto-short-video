@@ -5,6 +5,21 @@ import { z } from "zod";
 
 const ApiErrorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
 
+export const AiProviderCatalogSchema = z.object({
+  providers: z.array(
+    z.object({
+      id: z.enum(["claude", "openai"]),
+      label: z.string(),
+      configured: z.boolean(),
+      defaultModel: z.string(),
+      models: z.array(z.string()),
+      warning: z.string().optional(),
+    }),
+  ),
+  loadedAt: z.iso.datetime(),
+});
+export type AiProviderCatalog = z.infer<typeof AiProviderCatalogSchema>;
+
 export class ApiError extends Error {
   constructor(
     readonly code: string,
@@ -44,6 +59,14 @@ export function saveProject(project: Project): Promise<Project> {
     `/api/projects/${encodeURIComponent(project.id)}`,
     { method: "PUT", body: JSON.stringify(project) },
     ProjectSchema,
+  );
+}
+
+export function fetchAiProviderCatalog(refresh = false): Promise<AiProviderCatalog> {
+  return request(
+    `/api/settings/ai-providers${refresh ? "?refresh=1" : ""}`,
+    { method: "GET" },
+    AiProviderCatalogSchema,
   );
 }
 

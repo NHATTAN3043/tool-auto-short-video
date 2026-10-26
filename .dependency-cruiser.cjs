@@ -27,8 +27,11 @@ module.exports = {
       name: "adapters-isolated",
       comment: "an adapter never imports another adapter",
       severity: "error",
-      from: { path: "^packages/adapters/src/([^/]+)/" },
-      to: { path: "^packages/adapters/src/", pathNot: "^packages/adapters/src/$1/" },
+      from: { path: "^packages/adapters/src/(?!ai-common/)([^/]+)/" },
+      to: {
+        path: "^packages/adapters/src/",
+        pathNot: ["^packages/adapters/src/$1/", "^packages/adapters/src/ai-common/"],
+      },
     },
     {
       name: "video-only-domain",

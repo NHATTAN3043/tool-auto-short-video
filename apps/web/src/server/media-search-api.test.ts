@@ -113,6 +113,34 @@ describe("media search API", () => {
     expect((await search(p, "q=cat&kind=video&lang=fr")).status).toBe(400);
   });
 
+  it("browses and imports whole library files into a Manual project without keywords or duplicate assets", async () => {
+    await importClip(await project("assisted"));
+    const [item] = (await (await listLibrary()).json()) as LibraryMedia[];
+    expect(item).toBeDefined();
+    const target = await project("manual");
+    const pick = () =>
+      importRoute(
+        new Request("http://x", {
+          method: "POST",
+          body: JSON.stringify({
+            candidate: { provider: "library", ref: item?.id, kind: "video" },
+            query: "",
+          }),
+        }),
+        ctx(target.id),
+      );
+    const downloads = remote.opened.length;
+    const response = await pick();
+    expect(response.status).toBe(201);
+    const first = (await response.json()) as { asset: MediaAsset; startMs?: number };
+    expect(first.asset).toMatchObject({ contentHash: item?.contentHash, kind: "video" });
+    expect(first.startMs).toBeUndefined();
+    const again = await pick();
+    expect(again.status).toBe(201);
+    expect(((await again.json()) as { asset: MediaAsset }).asset.id).toBe(first.asset.id);
+    expect(remote.opened).toHaveLength(downloads);
+  });
+
   it("proxies provider media with Range and refuses other hosts", async () => {
     const ok = await proxy(
       new Request("http://x/api/media-proxy?url=https%3A%2F%2Fcdn.pexels.test%2F7-small.mp4", {

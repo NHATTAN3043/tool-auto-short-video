@@ -87,7 +87,8 @@ phần còn lại tự chia lại.
 
 - Đổi mọi mốc ms → frame bằng `Math.round(ms / 1000 × fps)`. Duration của cảnh = `frame(end) − frame(start)`
   (không làm tròn từng duration riêng lẻ, nếu không sai số cộng dồn làm lệch tiếng).
-- Video: `startFrom = frame(sourceStartMs)`, `segmentFrames = frame(sourceEndMs ?? duration) − startFrom`.
+- Video: `startFrom = frame(sourceStartMs)`, `segmentFrames = frame(sourceEndMs ?? duration) − startFrom` (khung
+  nguồn), `playedFrames = segmentFrames / playbackRate` (khung trên timeline, ADR 0021); `<Loop>` dùng `playedFrames`.
 - Đường dẫn file được truyền vào qua hàm `resolveUrl(asset)`: web dùng `/api/projects/:id/files/...`, worker dùng URL server nội bộ.
   Nhờ vậy domain không biết gì về HTTP.
 - Hiệu ứng âm thanh (SFX) của cảnh: `from = frame(đầu cảnh) + frame(offsetMs)`, dài bằng file SFX nhưng bị cắt ở cuối video;
@@ -219,3 +220,19 @@ Trong môi trường thử, video 14 giây mất khoảng 2 phút để render, 
 - `MediaCandidate` nhiều đoạn cùng clip có chung `provider`/`ref`: React key, chống trùng và danh sách đã dùng phải
   dùng `candidateKey` (có `#n`), không dùng `provider:ref`.
 - Xem thử một đoạn bằng media fragment `…/file?file=media#t=<start>,<end>` (giây); trình duyệt tự dừng ở `end`.
+
+## 13. Full AI theo video nguồn (ADR 0020)
+
+- Shot được đánh số từ 1 trong prompt và câu trả lời, adapter trừ 1; `normalizeSourceCut` kiểm tra lại thứ tự và phạm
+  vi trên vị trí 0-based nên số sai không lọt qua.
+- Kiểm tra "giữ nguyên lời": so dãy từ (NFC, chữ thường, bỏ ký tự không phải chữ/số) của lời AI với dãy từ kịch bản theo
+  kiểu dãy con tham lam — đủ để cho phép bỏ câu/đổi dấu câu, và chặn mọi từ mới hay đổi thứ tự.
+- Video dự án và bản trong kho có thể lệch độ dài vài ms do probe làm tròn: `applySourceCut` kẹp dải vào độ dài asset
+  của dự án, `assignMedia` cũng kẹp `sourceEndMs`.
+- Hook/kết trong câu trả lời là trường phẳng (`hookNarration`, `hookFromShot`…) luôn có mặt: structured output của
+  OpenAI (strict) không nhận field optional, còn object nullable thì không chắc mọi nhà cung cấp đều nhận.
+  `sourceCutFromOutput` chỉ giữ hook/kết khi request có yêu cầu.
+- Khớp tốc độ chạy sau toàn bộ các bước (cả khi bước giọng lỗi hoặc tắt), trên mọi cảnh có dải video. Cảnh khi đó có
+  `durationMs` thủ công nên timeline không kéo theo giọng nữa; giọng dài hơn cảnh bị cắt khi render (đã cảnh báo).
+- `trimBefore`/`durationInFrames` của `OffthreadVideo` tính theo khung nguồn, không nhân `playbackRate` (đã đọc mã
+  Remotion 4.0.532: Sequence ngoài dài `trimBefore + (trimAfter − trimBefore) / playbackRate`).

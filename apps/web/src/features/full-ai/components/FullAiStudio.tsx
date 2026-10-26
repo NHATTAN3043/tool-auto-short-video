@@ -45,6 +45,8 @@ import {
   quickRequest,
   rewriteTask,
   runUsesSkill,
+  sourceClips,
+  sourceVideos,
   stepsLine,
   withInstalledSkill,
 } from "../model";
@@ -89,6 +91,7 @@ export function FullAiStudio({
   const [rewrite, setRewrite] = useState<RewriteState | null>(null);
   const [lastRun, setLastRun] = useState<LastRun | null>(null);
   const [languageError, setLanguageError] = useState<string | null>(null);
+  const [durationError, setDurationError] = useState<string | null>(null);
 
   const projectId = project.id;
   const openReview = useCallback(() => {
@@ -98,10 +101,18 @@ export function FullAiStudio({
 
   const language = projectLanguage(project);
   const languageLabel = CONTENT_LANGUAGE_LABELS[language];
-  const askFirst = canAskFirst(project);
-  const quickSteps = fullAiSteps(project.automationSettings, { tts: ttsAvailable });
+  // A source video is cut by the run itself (ADR 0020): no questions, no outline.
+  const onSource = draft.sourceVideo !== undefined;
+  const askFirst = canAskFirst(project) && !onSource;
+  // Whether the source is analyzed only changes the paid steps, which the server's estimate lists.
+  const quickSteps = fullAiSteps(
+    project.automationSettings,
+    { tts: ttsAvailable },
+    undefined,
+    onSource ? { analyzed: true } : undefined,
+  );
   const step: FullAiDraftStep = askFirst ? draft.step : "idea";
-  const startError = ideaError(draft, project);
+  const startError = durationError ?? ideaError(draft, project);
   const preparing = fullAi.state.step === "estimating" || fullAi.state.step === "running";
   const approval = approveRequest(draft, language);
 
@@ -237,8 +248,11 @@ export function FullAiStudio({
       <>
         <IdeaStep
           draft={draft}
+          videos={sourceVideos(project)}
+          clips={draft.sourceVideo ? sourceClips(project, draft.sourceVideo.assetId) : []}
           language={language}
           askFirst={askFirst}
+          writesScript={canAskFirst(project)}
           skills={skills}
           showSkill={skills.length > 0 && (askFirst || runUsesSkill(quickSteps, project.automationSettings))}
           showRanking={quickSteps.includes("rank")}
@@ -248,6 +262,7 @@ export function FullAiStudio({
           }}
           onSkillChange={changeSkill}
           onLanguageChange={changeLanguage}
+          onDurationError={setDurationError}
         />
         {startError ? <p className="text-sm text-muted-foreground">{startError}</p> : null}
         {quickSteps.includes("media") ? <UnanalyzedClipsHint project={project} /> : null}

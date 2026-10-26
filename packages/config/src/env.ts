@@ -47,6 +47,12 @@ export const EnvSchema = z.object({
   /** Claude API (M9). Unset → AI suggestions are hidden; Manual mode needs no key. */
   ANTHROPIC_API_KEY: optionalString,
   AI_MODEL: stringWithDefault("claude-sonnet-5-5"),
+  /** OpenAI Responses API. Unset means OpenAI is hidden from project settings. */
+  OPENAI_API_KEY: optionalString,
+  OPENAI_AI_MODEL: stringWithDefault("gpt-6-luna"),
+  /** Comma-separated glob patterns applied to the providers' live model lists. */
+  ANTHROPIC_AI_MODEL_PATTERNS: stringWithDefault("claude-*"),
+  OPENAI_AI_MODEL_PATTERNS: stringWithDefault("gpt-*"),
   /**
    * Default budgets for every paid call (AI and TTS), in USD, until they are saved on the settings page
    * (M11, ADR 0009). "none" = no limit; "0" blocks every paid call.

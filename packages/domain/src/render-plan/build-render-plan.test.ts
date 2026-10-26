@@ -72,6 +72,8 @@ describe("buildRenderPlan", () => {
       volume: 0,
       startFrom: 96,
       segmentFrames: 189,
+      playbackRate: 1,
+      playedFrames: 189,
       loop: false,
     });
     expect(b?.media).toEqual({
@@ -85,6 +87,29 @@ describe("buildRenderPlan", () => {
     expect(c?.durationSource).toBe("manual");
     // a 2s clip on a 5s scene runs to the end of the file and loops
     expect(d?.media).toMatchObject({ startFrom: 0, segmentFrames: 60, loop: true });
+  });
+
+  it("keeps trims in source frames and shortens the segment by its playback rate (ADR 0021)", () => {
+    const media = { ...cover, assetId: "v", sourceStartMs: 1000, sourceEndMs: 7000 };
+    const at = (playbackRate: number, durationMs: number) =>
+      buildRenderPlan(
+        project({
+          assets: [asset("v", "video", { durationMs: 10_000 })],
+          scenes: [scene("a", "x", { durationMs, media: { ...media, playbackRate } })],
+        }),
+        resolveUrl,
+      ).scenes[0]?.media;
+    // 6 s of source at 1.2× fills 5 s.
+    expect(at(1.2, 5000)).toMatchObject({
+      startFrom: 30,
+      segmentFrames: 180,
+      playbackRate: 1.2,
+      playedFrames: 150,
+      loop: false,
+    });
+    // At 0.8× the same 6 s last 7.5 s: a 7 s scene does not loop.
+    expect(at(0.8, 7000)).toMatchObject({ playedFrames: 225, loop: false });
+    expect(at(1.25, 7000)).toMatchObject({ playedFrames: 144, loop: true });
   });
 
   it("plays a video of unknown length straight through", () => {

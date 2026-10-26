@@ -19,6 +19,8 @@ import type {
   ScriptSuggestion,
   ShotDescriptions,
   SkillGuidance,
+  SourceCutRequest,
+  SourceCutSuggestion,
   VisualPlanRequest,
   VisualPlansSuggestion,
 } from "@studio/domain";
@@ -47,6 +49,9 @@ import {
   shotsIntro,
   ShotsOutputSchema,
   SHOTS_SYSTEM_PROMPT,
+  sourceCutFromOutput,
+  sourceCutPrompt,
+  SourceCutOutputSchema,
   systemPrompt,
   toVisualPlan,
   visualPrompt,
@@ -100,8 +105,10 @@ export function approxTokens(text: string): number {
 export function outputBudget(task: AiTask): { max: number; expected: number } {
   switch (task.type) {
     case "script": {
+      // Long targets (up to 999 seconds) need room for thousands of words.
       const words = task.input.targetDurationSec * 2.6;
-      return { max: 4000, expected: Math.round(words * 2 + 800) };
+      const expected = Math.round(words * 2 + 800);
+      return { max: Math.min(32_000, Math.max(4000, expected * 2)), expected };
     }
     case "scenes": {
       const scriptTokens = approxTokens(task.input.script);
@@ -131,6 +138,12 @@ export function outputBudget(task: AiTask): { max: number; expected: number } {
       const words = task.input.targetDurationSec * 2.6;
       const scenes = Math.ceil(words / 18);
       const expected = Math.round(words * 2 + scenes * 150 + 900);
+      return { max: Math.min(32_000, Math.max(6000, expected * 2)), expected };
+    }
+    case "source_cut": {
+      // The narration of the target length plus a few numbers per scene, about one scene per two shots.
+      const words = task.input.targetDurationSec * 2.6;
+      const expected = Math.round(words * 2 + task.input.shots.length * 30 + 900);
       return { max: Math.min(32_000, Math.max(6000, expected * 2)), expected };
     }
   }
@@ -191,6 +204,8 @@ function taskPrompt(task: AiTask): string {
       return briefQuestionsPrompt(task.input);
     case "script_outline":
       return outlinePrompt(task.input);
+    case "source_cut":
+      return sourceCutPrompt(task.input);
   }
 }
 
@@ -408,6 +423,18 @@ export class ClaudeAi implements AiPort {
           visualPlan: toVisualPlan(fields),
         })),
       }),
+      { guidance },
+    );
+  }
+
+  async planSourceCut(
+    input: SourceCutRequest,
+    guidance?: SkillGuidance,
+  ): Promise<AiCall<SourceCutSuggestion>> {
+    return this.run(
+      { type: "source_cut", input },
+      SourceCutOutputSchema,
+      (data) => sourceCutFromOutput(data, input),
       { guidance },
     );
   }

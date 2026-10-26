@@ -3,6 +3,10 @@ import { z } from "zod";
 export const MediaFitSchema = z.enum(["cover", "contain"]);
 export type MediaFit = z.infer<typeof MediaFitSchema>;
 
+/** Slowest and fastest a scene video may play (ADR 0021); Full AI keeps to a narrower range. */
+export const SCENE_PLAYBACK_RATE_MIN = 0.5;
+export const SCENE_PLAYBACK_RATE_MAX = 2;
+
 /** Non-destructive: only references a segment of an asset, the file itself is never touched. */
 export const SceneMediaSchema = z
   .object({
@@ -17,6 +21,11 @@ export const SceneMediaSchema = z
     /** Original clip audio; 0 by default so it never drowns the narration. */
     volume: z.number().min(0).max(1),
     kenBurns: z.boolean(),
+    /**
+     * Video speed (ADR 0021): 1.1 plays the segment 10% faster, so it lasts 1/1.1 as long. Missing = 1.
+     * Manual changes and the editor's voice fit preserve scene duration; Full AI may also fit duration.
+     */
+    playbackRate: z.number().min(SCENE_PLAYBACK_RATE_MIN).max(SCENE_PLAYBACK_RATE_MAX).optional(),
   })
   .refine((media) => media.sourceEndMs === undefined || media.sourceEndMs > media.sourceStartMs, {
     message: "sourceEndMs must be greater than sourceStartMs",

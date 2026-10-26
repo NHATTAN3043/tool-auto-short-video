@@ -351,6 +351,65 @@ describe("ClaudeAi", () => {
     expect(revision).toContain("Góp ý của người dùng: hook mạnh hơn");
   });
 
+  it("cuts a source video: hook from the source, one long main scene, ending on a clip (ADR 0020)", async () => {
+    const s = setup([
+      message({
+        title: "Cứu chó",
+        hookNarration: "Chú chó này suýt chết!",
+        hookFromShot: 2,
+        hookToShot: 2,
+        main: [{ fromShot: 1, toShot: 2, narration: "Chú chó kẹt dưới mương, rồi người đến gần." }],
+        outroNarration: "Theo dõi để xem tiếp.",
+        outroFromShot: 0,
+        outroToShot: 0,
+      }),
+    ]);
+    const input = {
+      idea: "Kể lại hành trình giải cứu",
+      targetDurationSec: 30,
+      durationMs: 40_000,
+      shots: [
+        { startMs: 0, endMs: 6000, description: "Chó trong mương", textOverlay: false },
+        { startMs: 6000, endMs: 12_000, description: "Người đến gần", textOverlay: true },
+      ],
+      script: { text: "Thoại gốc: cứu nó đi!", role: "reference" as const },
+      hook: { kind: "source" as const },
+      outro: { kind: "clip" as const, durationMs: 4000 },
+    };
+    const result = await s.ai.planSourceCut(input);
+    expect(result.data).toEqual({
+      title: "Cứu chó",
+      hook: { narration: "Chú chó này suýt chết!", fromShot: 1, toShot: 1 },
+      main: [{ fromShot: 0, toShot: 1, narration: "Chú chó kẹt dưới mương, rồi người đến gần." }],
+      outro: { narration: "Theo dõi để xem tiếp." },
+    });
+    const prompt = JSON.stringify(s.bodies()[0]?.messages);
+    expect(prompt).toContain("MỘT cảnh dài liền mạch");
+    expect(prompt).toContain("một clip riêng dài 4 giây");
+    expect(prompt).toContain("Shot 1 (0 giây–6 giây, dài 6 giây): Chó trong mương");
+    expect(prompt).toContain("Shot 2 (6 giây–12 giây, dài 6 giây): Người đến gần [có chữ/logo in sẵn]");
+    expect(prompt).toContain("Thoại gốc: cứu nó đi!");
+    expect(prompt).toContain("Kể lại hành trình giải cứu");
+    expect(outputBudget({ type: "source_cut", input }).max).toBeGreaterThanOrEqual(6000);
+
+    // Not asked for: a hook in the answer is dropped, and the prompt says there is none.
+    const plain = setup([
+      message({
+        title: "",
+        hookNarration: "Thừa",
+        hookFromShot: 0,
+        hookToShot: 0,
+        main: [{ fromShot: 1, toShot: 2, narration: "Lời." }],
+        outroNarration: "",
+        outroFromShot: 0,
+        outroToShot: 0,
+      }),
+    ]);
+    const bare = await plain.ai.planSourceCut({ ...input, hook: undefined, outro: undefined });
+    expect(bare.data).toEqual({ title: "", main: [{ fromShot: 0, toShot: 1, narration: "Lời." }] });
+    expect(JSON.stringify(plain.bodies()[0]?.messages)).toContain("Mở đầu (hook): KHÔNG có");
+  });
+
   it("sizes the outline like a script with its scene plan", () => {
     expect(outputBudget({ type: "brief_questions", input: scriptInput }).max).toBe(3000);
     expect(outputBudget({ type: "script_outline", input: { ...scriptInput, answers: [] } }).max).toBe(6000);

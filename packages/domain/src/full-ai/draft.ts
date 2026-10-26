@@ -6,6 +6,8 @@ import {
   AI_SCRIPT_MAX_SECONDS,
   AI_SCRIPT_MIN_SECONDS,
   BriefQuestionSchema,
+  SourcePartSchema,
+  SourceScriptRoleSchema,
   type BriefAnswer,
   type BriefQuestionsSuggestion,
   type ScriptOutlineSuggestion,
@@ -65,6 +67,20 @@ export const FullAiDraftSchema = z.object({
   tone: z.string().max(200),
   skillId: SkillIdSchema.optional(),
   rankingMode: MediaRankingModeSchema,
+  /**
+   * Tell the story along one project video (ADR 0020); absent keeps the montage of searched media. The
+   * script is what the user typed so far, possibly empty.
+   */
+  sourceVideo: z
+    .object({
+      assetId: z.string().min(1),
+      volume: z.number().min(0).max(1),
+      script: z.string().max(20_000).optional(),
+      scriptRole: SourceScriptRoleSchema.optional(),
+      hook: SourcePartSchema.optional(),
+      outro: SourcePartSchema.optional(),
+    })
+    .optional(),
   /** The brief the questions were asked for (briefKey); "Tiếp" asks again only when it changed. */
   askedFor: z.string().max(3000).optional(),
   questions: z.array(BriefQuestionSchema).max(AI_BRIEF_MAX_QUESTIONS),

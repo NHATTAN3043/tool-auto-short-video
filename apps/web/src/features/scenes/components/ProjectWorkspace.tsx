@@ -20,7 +20,12 @@ import { useCallback, useState, type KeyboardEvent, type ReactNode } from "react
 import { AiAssistantPanel } from "@/features/ai";
 import { FullAiLock, FullAiPanel, useFullAi } from "@/features/full-ai";
 import { AudioSettings, MediaLibrary } from "@/features/media";
-import { SceneMediaSearch, SharedMediaLibrary, type PickedMedia } from "@/features/media-search";
+import {
+  LibraryMediaPicker,
+  SceneMediaSearch,
+  SharedMediaLibrary,
+  type PickedMedia,
+} from "@/features/media-search";
 import { PreviewPanel, StyleSettings, usePreview, WatermarkSettings } from "@/features/preview";
 import { MODE_LABELS, ProjectSettingsDialog } from "@/features/project";
 import { RenderPanel } from "@/features/render";
@@ -243,6 +248,15 @@ export function ProjectWorkspace({
                 onOpenScript={() => {
                   setTab("script");
                 }}
+                renderLibraryPicker={(scene, onPicked) => (
+                  <LibraryMediaPicker
+                    projectId={editor.project.id}
+                    onPicked={(picked) => {
+                      pickMedia(scene.id, picked);
+                      onPicked();
+                    }}
+                  />
+                )}
                 renderMediaSearch={(scene, sceneLabel) => (
                   <SceneMediaSearch
                     projectId={editor.project.id}
@@ -301,6 +315,8 @@ export function ProjectWorkspace({
                   onMergeNext: editor.mergeWithNext,
                   onAssignMedia: editor.assignMedia,
                   onMediaChange: editor.updateMedia,
+                  onFitSpeed: editor.fitSpeed,
+                  onPlaybackRateChange: editor.setPlaybackRate,
                   onClearMedia: editor.clearMedia,
                   onMediaCommit: editor.commitTyping,
                   onAddSfx: addSfxFromLibrary,

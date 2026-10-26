@@ -23,7 +23,13 @@ export function makeRequestAiTask(deps: AiTaskDeps & { newId?: IdGenerator }) {
   const lock = new KeyedLock();
   return (input: AiTaskInput): Promise<RenderJob> =>
     lock.run(input.projectId, async () => {
-      const task = withProjectLanguage(input.task, await deps.repo.get(input.projectId));
+      const project = await deps.repo.get(input.projectId);
+      const task = withProjectLanguage(input.task, project);
+      const selectedAi = deps.resolveAi?.(project.ai) ?? deps.ai;
+      const config = project.ai ?? {
+        provider: selectedAi.id === "openai" ? ("openai" as const) : ("claude" as const),
+        model: selectedAi.model,
+      };
       const cost = await estimate({ projectId: input.projectId, task });
       const sameTask = JSON.stringify(task);
       const jobs = await deps.queue.list({ projectId: input.projectId });
@@ -37,7 +43,7 @@ export function makeRequestAiTask(deps: AiTaskDeps & { newId?: IdGenerator }) {
         id: (deps.newId ?? newId)("job"),
         projectId: input.projectId,
         kind: "ai",
-        ai: { task, maxUsd: cost.maxUsd },
+        ai: { task, config, maxUsd: cost.maxUsd },
         status: "QUEUED",
         progress: 0,
         createdAt: deps.clock.now(),

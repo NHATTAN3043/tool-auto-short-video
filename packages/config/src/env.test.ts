@@ -13,6 +13,9 @@ describe("loadEnv", () => {
       ELEVENLABS_DEFAULT_MODEL_ID: "eleven_flash_v2_5",
       ELEVENLABS_USD_PER_CREDIT: 0.0006,
       AI_MODEL: "claude-sonnet-5-5",
+      OPENAI_AI_MODEL: "gpt-6-luna",
+      ANTHROPIC_AI_MODEL_PATTERNS: "claude-*",
+      OPENAI_AI_MODEL_PATTERNS: "gpt-*",
       BUDGET_MAX_USD_PER_CALL: 0.5,
       BUDGET_MAX_USD_PER_DAY: 2,
       BUDGET_MAX_USD_PER_MONTH: 20,
@@ -40,6 +43,9 @@ describe("loadEnv", () => {
       ELEVENLABS_DEFAULT_MODEL_ID: "eleven_flash_v2_5",
       ELEVENLABS_USD_PER_CREDIT: 0.0006,
       AI_MODEL: "claude-sonnet-5-5",
+      OPENAI_AI_MODEL: "gpt-6-luna",
+      ANTHROPIC_AI_MODEL_PATTERNS: "claude-*",
+      OPENAI_AI_MODEL_PATTERNS: "gpt-*",
       BUDGET_MAX_USD_PER_CALL: 0.5,
       BUDGET_MAX_USD_PER_DAY: 2,
       BUDGET_MAX_USD_PER_MONTH: 20,
@@ -87,6 +93,21 @@ describe("loadEnv", () => {
       AI_MODEL: "claude-haiku-4-5",
     });
     expect(loadEnv({ ANTHROPIC_API_KEY: "" }).ANTHROPIC_API_KEY).toBeUndefined();
+  });
+
+  it("reads OpenAI settings and model filters", () => {
+    expect(
+      loadEnv({
+        OPENAI_API_KEY: "sk-openai",
+        OPENAI_AI_MODEL: "gpt-test",
+        OPENAI_AI_MODEL_PATTERNS: "gpt-test,gpt-safe-*",
+      }),
+    ).toMatchObject({
+      OPENAI_API_KEY: "sk-openai",
+      OPENAI_AI_MODEL: "gpt-test",
+      OPENAI_AI_MODEL_PATTERNS: "gpt-test,gpt-safe-*",
+    });
+    expect(loadEnv({ OPENAI_API_KEY: "" }).OPENAI_API_KEY).toBeUndefined();
   });
 
   it("reads budget defaults: a number, none for no limit, 0 to block", () => {

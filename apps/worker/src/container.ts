@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   BudgetCostGuard,
   ClaudeAi,
+  OpenAi,
   createPgDatabase,
   ElevenLabsTts,
   FfmpegAudioNormalizer,
@@ -39,6 +40,7 @@ import {
   type Env,
 } from "@studio/config";
 import {
+  makeAddUploadToLibrary,
   makeAnalyzeClips,
   makeExportCapcut,
   makeFailStaleJobs,
@@ -60,7 +62,9 @@ import {
   type PaidCallContext,
   type MediaSearchPort,
   type ProjectRepository,
+  type AiPort,
 } from "@studio/services";
+import type { AiConfig } from "@studio/domain";
 import { COMPOSITION_ID } from "@studio/video/meta";
 
 export const REPO_ROOT = findRepoRoot(import.meta.dirname);
@@ -162,9 +166,22 @@ export function createContainer(env: Env = loadRepoEnv(REPO_ROOT), clock: Clock 
 
   // No key → ai jobs fail with a clear message.
   const ai =
-    env.ANTHROPIC_API_KEY === undefined
-      ? null
-      : new ClaudeAi({ apiKey: env.ANTHROPIC_API_KEY, model: env.AI_MODEL });
+    env.ANTHROPIC_API_KEY !== undefined
+      ? new ClaudeAi({ apiKey: env.ANTHROPIC_API_KEY, model: env.AI_MODEL })
+      : env.OPENAI_API_KEY !== undefined
+        ? new OpenAi({ apiKey: env.OPENAI_API_KEY, model: env.OPENAI_AI_MODEL })
+        : null;
+  const resolveAi = (config?: AiConfig): AiPort => {
+    const provider = config?.provider ?? "claude";
+    const model = config?.model ?? env.AI_MODEL;
+    if (provider === "claude" && env.ANTHROPIC_API_KEY !== undefined) {
+      return new ClaudeAi({ apiKey: env.ANTHROPIC_API_KEY, model });
+    }
+    if (provider === "openai" && env.OPENAI_API_KEY !== undefined) {
+      return new OpenAi({ apiKey: env.OPENAI_API_KEY, model });
+    }
+    throw new Error(`Chưa cấu hình API key cho ${provider === "claude" ? "Claude" : "OpenAI"}`);
+  };
   // Full AI searches and downloads media in the worker too (ADR 0010); without keys only the library is used.
   const providers: MediaSearchPort[] = [];
   if (env.PEXELS_API_KEY !== undefined) providers.push(new PexelsSearch({ apiKey: env.PEXELS_API_KEY }));
@@ -173,13 +190,19 @@ export function createContainer(env: Env = loadRepoEnv(REPO_ROOT), clock: Clock 
   // Read when a job runs, so a skill installed or edited after the worker started is used too.
   const skills = new LocalSkillCatalog(resolveSkillsDir(env, REPO_ROOT));
   const guardedAi = ai ? (context: PaidCallContext) => new GuardedAi(ai, costGuard, context) : null;
-  const runAiTask = guardedAi ? makeRunAiTask({ ai: guardedAi, storage, rankImages, skills }) : null;
+  const clipFrames = new FfmpegClipFrames({ ffmpegPath: env.STUDIO_FFMPEG_PATH });
+  const resolveGuardedAi = (config?: AiConfig) => (context: PaidCallContext) =>
+    new GuardedAi(resolveAi(config), costGuard, context);
+  const runAiTask = guardedAi
+    ? makeRunAiTask({ ai: guardedAi, resolveAi: resolveGuardedAi, storage, rankImages, skills })
+    : null;
   const runFullAi = guardedAi
     ? makeRunFullAi({
         repo,
         storage,
         clock,
         ai: guardedAi,
+        resolveAi: resolveGuardedAi,
         searchMedia: makeSearchMedia({ repo, library: mediaLibrary, providers }),
         importCandidate: makeImportCandidate({
           repo,
@@ -193,6 +216,15 @@ export function createContainer(env: Env = loadRepoEnv(REPO_ROOT), clock: Clock 
         }),
         rankImages,
         skills,
+        // Full AI on a source video (ADR 0020) analyzes it like a clip job when it has no shots yet.
+        source: {
+          library: mediaLibrary,
+          storage,
+          frames: clipFrames,
+          probe,
+          clock,
+          addUploadToLibrary: makeAddUploadToLibrary({ library: mediaLibrary, storage, clock }),
+        },
         voices:
           tts && generateSceneVoices
             ? {
@@ -213,8 +245,10 @@ export function createContainer(env: Env = loadRepoEnv(REPO_ROOT), clock: Clock 
     ? makeAnalyzeClips({
         library: mediaLibrary,
         storage,
-        frames: new FfmpegClipFrames({ ffmpegPath: env.STUDIO_FFMPEG_PATH }),
+        frames: clipFrames,
+        probe,
         ai: guardedAi,
+        resolveAi: resolveGuardedAi,
         clock,
       })
     : null;

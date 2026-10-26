@@ -16,6 +16,8 @@ import type {
   ScriptSuggestion,
   ShotDescriptions,
   SkillGuidance,
+  SourceCutRequest,
+  SourceCutSuggestion,
   VisualPlanRequest,
   VisualPlansSuggestion,
   VoiceSettings,
@@ -130,6 +132,10 @@ export class GuardedAi implements AiPort {
       () => this.inner.generateScriptOutline(input, guidance),
       guidance,
     );
+  }
+
+  planSourceCut(input: SourceCutRequest, guidance?: SkillGuidance): Promise<AiCall<SourceCutSuggestion>> {
+    return this.run({ type: "source_cut", input }, () => this.inner.planSourceCut(input, guidance), guidance);
   }
 
   /** Free: worked out from sizes; not logged. */

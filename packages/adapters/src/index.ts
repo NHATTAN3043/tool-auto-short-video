@@ -28,6 +28,13 @@ export {
   DEFAULT_CLAUDE_MODEL,
   type ClaudeAiOptions,
 } from "./ai-claude/claude-ai";
+export { DEFAULT_OPENAI_MODEL, OPENAI_PROVIDER_ID, OpenAi, type OpenAiOptions } from "./ai-openai/openai-ai";
+export {
+  listClaudeModels,
+  listOpenAiModels,
+  matchesModelPatterns,
+  type ProviderModelsResult,
+} from "./ai-models/provider-models";
 export {
   ELEVENLABS_MODELS,
   ELEVENLABS_PROVIDER_ID,

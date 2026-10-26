@@ -41,12 +41,21 @@ import {
   type Project,
   type RenderJob,
   type SkillGuidance,
+  type SourceCutPartRequest,
+  type SourceCutRequest,
+  type SourcePart,
+  applySourceCut,
+  fitSourceScenes,
+  normalizeSourceCut,
+  sourceCutShots,
 } from "@studio/domain";
 
 import type { MediaSearchResult } from "../media-search/search-media";
 import type { ImportCandidateInput, ImportCandidateResult } from "../media-search/import-candidate";
+import { analyzeLibraryClip, readLibraryVideoDuration, type AnalyzeClipDeps } from "../clip/analyze-clips";
+import type { AddUploadToLibrary } from "../media-search/add-upload-to-library";
 import { fullAiDraftKey } from "./draft";
-import { AiCallError, type AiPort } from "../ports/ai";
+import { AiCallError, type AiPort, type AiResolver } from "../ports/ai";
 import type { Clock } from "../ports/clock";
 import type { PaidPortFactory } from "../ports/cost-guard";
 import type { ProjectRepository } from "../ports/project-repository";
@@ -62,11 +71,17 @@ export interface RunFullAiDeps {
   clock: Clock;
   /** Bound to the job, so CostGuard checks and logs every call. */
   ai: PaidPortFactory<AiPort>;
+  resolveAi?: (config: Parameters<AiResolver>[0]) => PaidPortFactory<AiPort>;
   searchMedia: (input: { projectId: string; query: MediaSearchQuery }) => Promise<MediaSearchResult>;
   importCandidate: (input: ImportCandidateInput) => Promise<ImportCandidateResult>;
   rankImages: ResolveRankImages;
   /** Installed skills (ADR 0012); without it a requested skill is skipped with a warning. */
   skills?: SkillCatalogPort;
+  /**
+   * Full AI on a source video (ADR 0020): the video's library copy is made and analyzed when it has no
+   * shots yet. Without it such runs stop at their first step.
+   */
+  source?: AnalyzeClipDeps & { addUploadToLibrary: AddUploadToLibrary };
   /** Null without a TTS provider; the voice step then only warns. */
   voices: {
     tts: TtsPort;
@@ -114,7 +129,7 @@ export function makeRunFullAi(deps: RunFullAiDeps) {
     if (!info) return { ok: false, message: "Job Full AI thiếu nội dung yêu cầu", costUsd: 0 };
     const { request, steps } = info;
     const projectId = job.projectId;
-    const ai = deps.ai({ projectId, jobId: job.id });
+    const ai = (deps.resolveAi?.(info.config) ?? deps.ai)({ projectId, jobId: job.id });
     const warnings: string[] = [];
     const warn = (message: string) => {
       if (warnings.length < FULL_AI_MAX_WARNINGS && !warnings.includes(message)) warnings.push(message);
@@ -199,6 +214,69 @@ export function makeRunFullAi(deps: RunFullAiDeps) {
       if ((await deps.repo.get(projectId)).scenes.length === 0) {
         throw new DomainError("INVALID_OPERATION", "Script không tạo ra cảnh nào");
       }
+    }
+
+    /** The library copy of the source video (ADR 0020), made now when the upload was never copied. */
+    async function sourceItem() {
+      const sourceVideo = request.sourceVideo;
+      if (!sourceVideo || !deps.source) {
+        throw new DomainError("INVALID_OPERATION", "Worker chưa cấu hình phân tích video nguồn");
+      }
+      const project = await deps.repo.get(projectId);
+      const asset = project.assets.find((candidate) => candidate.id === sourceVideo.assetId);
+      if (!asset || asset.kind !== "video") {
+        throw new DomainError("INVALID_MEDIA", "Video nguồn không còn trong dự án");
+      }
+      const { item } = await deps.source.addUploadToLibrary({ projectId, asset });
+      const durationMs = await readLibraryVideoDuration(deps.source, item);
+      return { ...item, durationMs };
+    }
+
+    async function analyzeSource(): Promise<void> {
+      const source = deps.source;
+      const item = await sourceItem();
+      // Analyzed by a clip job since the request: nothing to pay for again.
+      if (!source || item.analysis) return;
+      const analyzed = await analyzeLibraryClip(source, ai, item, job.id, (usd) => {
+        costUsd += usd;
+      });
+      if (!analyzed) throw new DomainError("INVALID_MEDIA", "Video nguồn đã bị xoá khỏi kho chung");
+    }
+
+    async function cutSource(): Promise<void> {
+      const sourceVideo = request.sourceVideo;
+      const item = await sourceItem();
+      const analysis = item.analysis;
+      if (!sourceVideo || !analysis) {
+        throw new DomainError("INVALID_OPERATION", "Video nguồn chưa được phân tích");
+      }
+      const project = await deps.repo.get(projectId);
+      // What the AI needs to know of the hook and the ending: cut from the source, or a clip of that length.
+      const part = (choice: SourcePart | undefined): SourceCutPartRequest | undefined => {
+        if (choice === undefined || choice.kind === "none") return undefined;
+        if (choice.kind === "source") return { kind: "source" };
+        const clip = project.assets.find((asset) => asset.id === choice.assetId);
+        return clip?.kind === "video" && clip.durationMs
+          ? { kind: "clip", durationMs: clip.durationMs }
+          : { kind: "clip" };
+      };
+      const hook = part(sourceVideo.hook);
+      const outro = part(sourceVideo.outro);
+      const cutRequest: SourceCutRequest = withSkill({
+        idea: request.idea ?? "",
+        targetDurationSec: request.targetDurationSec,
+        ...(request.tone !== undefined && { tone: request.tone }),
+        durationMs: item.durationMs,
+        shots: sourceCutShots(analysis),
+        ...(sourceVideo.script && { script: sourceVideo.script }),
+        ...(hook && { hook }),
+        ...(outro && { outro }),
+        language,
+      });
+      const { data } = await paid(() => ai.planSourceCut(cutRequest, guidance));
+      const cut = normalizeSourceCut(data, cutRequest);
+      for (const message of cut.warnings) warn(message);
+      await update((stored) => applySourceCut(stored, cut, analysis, sourceVideo));
     }
 
     async function suggestVisuals(): Promise<void> {
@@ -387,6 +465,20 @@ export function makeRunFullAi(deps: RunFullAiDeps) {
       }
     }
 
+    /**
+     * On a source video each video scene plays a little faster or slower to end with its voice (ADR 0021),
+     * once the voices exist or are known to be missing. What still does not fit becomes a warning.
+     */
+    async function fitSourceVideo(): Promise<void> {
+      let messages: string[] = [];
+      await update((stored) => {
+        const fitted = fitSourceScenes(stored);
+        messages = fitted.warnings;
+        return fitted.project;
+      });
+      for (const message of messages) warn(message);
+    }
+
     /** Voices are best effort: a provider error is a warning, the scenes and media stay. */
     async function makeVoicesSafely(): Promise<void> {
       try {
@@ -404,6 +496,8 @@ export function makeRunFullAi(deps: RunFullAiDeps) {
       media: searchScenes,
       rank: rankScenes,
       select: selectMedia,
+      analyze: analyzeSource,
+      cut: cutSource,
       voice: makeVoicesSafely,
     };
 
@@ -429,6 +523,7 @@ export function makeRunFullAi(deps: RunFullAiDeps) {
         input.onProgress(stepProgress(0));
         await run[step]();
       }
+      if (request.sourceVideo) await fitSourceVideo();
     } catch (error) {
       const reason =
         error instanceof AiCallError && error.code === "AI_REFUSED"

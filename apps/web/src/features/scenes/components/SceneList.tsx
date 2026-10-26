@@ -57,6 +57,7 @@ export function SceneList({
   onOpenScript,
   renderVoice,
   renderMediaSearch,
+  renderLibraryPicker,
 }: {
   project: Project;
   sfxLibrary: readonly LibrarySfx[];
@@ -69,6 +70,7 @@ export function SceneList({
   onOpenScript: () => void;
   renderVoice?: (scene: Scene) => ReactNode;
   renderMediaSearch?: (scene: Scene, sceneLabel: string) => ReactNode;
+  renderLibraryPicker?: (scene: Scene, onPicked: () => void) => ReactNode;
 }) {
   const { scenes } = project;
   const { selectedIndex, select } = useSelectedScene(scenes);
@@ -129,6 +131,9 @@ export function SceneList({
           isFirst={selectedIndex === 0}
           isLast={selectedIndex === scenes.length - 1}
           actions={actions}
+          renderLibraryPicker={
+            renderLibraryPicker ? (onPicked) => renderLibraryPicker(scene, onPicked) : undefined
+          }
           voiceSlot={renderVoice?.(scene)}
           mediaSearchSlot={renderMediaSearch?.(scene, `Cảnh ${String(selectedIndex + 1)}`)}
         />

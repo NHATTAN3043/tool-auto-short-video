@@ -44,6 +44,8 @@ export interface SceneCardActions {
   onMergeNext: (sceneId: string) => void;
   onAssignMedia: (sceneId: string, assetId: string) => void;
   onMediaChange: (sceneId: string, patch: SceneMediaPatch) => void;
+  onFitSpeed: (sceneId: string) => void;
+  onPlaybackRateChange: (sceneId: string, playbackRate: number) => void;
   onClearMedia: (sceneId: string) => void;
   /** Ends a slider drag in the media editor, so the drag is one undo step. */
   onMediaCommit: () => void;
@@ -67,6 +69,7 @@ export function SceneCard({
   actions,
   voiceSlot,
   mediaSearchSlot,
+  renderLibraryPicker,
 }: {
   projectId: string;
   assets: readonly MediaAsset[];
@@ -82,6 +85,7 @@ export function SceneCard({
   voiceSlot?: ReactNode;
   /** Media search for this scene, rendered under the media editor. */
   mediaSearchSlot?: ReactNode;
+  renderLibraryPicker?: (onPicked: () => void) => ReactNode;
 }) {
   const source = DURATION_SOURCE_LABELS[entry.source];
   const words = countWords(scene.narration);
@@ -207,7 +211,7 @@ export function SceneCard({
           />
           <div className="flex flex-wrap items-center gap-3">
             <Label htmlFor={durationId} className="font-normal text-muted-foreground">
-              Thời lượng (giây)
+              Thời lượng cảnh (giây)
             </Label>
             <DurationField
               key={scene.durationMs ?? "auto"}
@@ -225,12 +229,23 @@ export function SceneCard({
         <div className="flex flex-col gap-3 px-5 py-4">
           <h3 className="text-sm font-semibold">Media</h3>
           <SceneMediaEditor
+            renderLibraryPicker={renderLibraryPicker}
             projectId={projectId}
             sceneLabel={`Cảnh ${String(entry.index + 1)}`}
             media={scene.media}
             assets={assets}
             logoAssetId={logoAssetId}
+            hasVoice={assets.some(
+              (asset) =>
+                asset.id === scene.voiceAssetId && asset.kind === "audio" && (asset.durationMs ?? 0) > 0,
+            )}
             actions={{
+              onPlaybackRateChange: (playbackRate) => {
+                actions.onPlaybackRateChange(scene.id, playbackRate);
+              },
+              onFitSpeed: () => {
+                actions.onFitSpeed(scene.id);
+              },
               onAssign: (assetId) => {
                 actions.onAssignMedia(scene.id, assetId);
               },
